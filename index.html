@@ -111,6 +111,7 @@ h3.sub { margin: 0; font-size: 15px; font-weight: 800; }
 .habit .tick svg { width: 16px; height: 16px; opacity: 0; }
 .habit .name { font-weight: 700; min-width: 0; }
 .habit .name small { display: block; font-weight: 500; color: var(--muted); font-size: 12px; }
+.habit .name small b.hp { color: var(--green); font-weight: 800; }
 .habit .pts { font-size: 12px; font-weight: 800; color: var(--muted); }
 .habit.done { background: var(--green-soft); border-color: transparent; }
 .habit.done .tick { background: var(--green); border-color: var(--green); color: var(--card); }
@@ -277,7 +278,18 @@ const S = { db: null, cfg: null, days: new Map(), date: todayKey(), view: "today
 const DEFAULT_TARGETS = { start: "2027-01-01", target: 13, calories: 2000, sleepGoal: 7.5, goalWeight: null, profitGoal: 50000 };
 const cfg = () => S.cfg || { ...DEFAULT_TARGETS, habits: [] };
 const habits = () => (cfg().habits || []).filter(h => h && h.name);
-const possible = () => habits().reduce((a, h) => a + (+h.pts || 0), 0);
+/* Hours habits score points per hour logged, up to a max number of hours. */
+const HOURS_CAP = 8;
+const hoursCap = h => +h.max > 0 ? +h.max : HOURS_CAP;
+const habitMax = h => h.type === "Hours" ? (+h.pts || 0) * hoursCap(h) : (+h.pts || 0);
+const r1 = v => Math.round(v * 10) / 10;
+function habitPts(h, day) {
+  if (h.type === "Hours") { const v = day.h && typeof day.h[h.id] === "number" ? day.h[h.id] : 0; return r1(Math.min(Math.max(v, 0), hoursCap(h)) * (+h.pts || 0)); }
+  return isDone(h, day) ? (+h.pts || 0) : 0;
+}
+const hoursNote = h => `Earns ${+h.pts || 0} pt per hour logged, up to ${hoursCap(h)} hours (${r1(habitMax(h))} pts max). Counts as done from ${+h.min > 0 ? +h.min + " h" : "any time logged"}.`;
+const ptsLabel = h => h.type === "Hours" ? `${+h.pts || 0} pt/hr` : `${+h.pts || 0} pt${+h.pts === 1 ? "" : "s"}`;
+const possible = () => habits().reduce((a, h) => a + habitMax(h), 0);
 /* Day types: Non-poker (default), Poker (day.type = "poker"), Day off (day.off). Habits say which days they count on. */
 const dayType = day => day && day.off ? "off" : day && day.type === "poker" ? "poker" : "np";
 const isPokerDay = day => dayType(day) === "poker";
@@ -285,7 +297,7 @@ const isPokerDay = day => dayType(day) === "poker";
 const habitDays = h => h.days ? { np: !!h.days.np, poker: !!h.days.poker, off: !!h.days.off } : { np: h.on !== "poker", poker: h.on !== "np", off: false };
 const appliesTo = (h, day) => habitDays(h)[dayType(day)];
 const habitsFor = day => habits().filter(h => appliesTo(h, day));
-const possibleFor = day => habitsFor(day).reduce((a, h) => a + (+h.pts || 0), 0);
+const possibleFor = day => r1(habitsFor(day).reduce((a, h) => a + habitMax(h), 0));
 const TARGET_KEY = { np: "target", poker: "pokerTarget", off: "offTarget" };
 const targetFor = day => { const c = cfg(), v = c[TARGET_KEY[dayType(day)]]; return v != null && v !== "" ? +v : dayType(day) === "off" ? 0 : (+c.target || 0); };
 const DAY_LABEL = { np: "Non-poker", poker: "Poker", off: "Day off" };
@@ -305,13 +317,13 @@ const getDay = k => S.days.get(k) || {};
 const isLogged = day => hasData(day);
 function isDone(h, day) {
   const v = day.h ? day.h[h.id] : undefined;
-  if (h.type === "Minutes") return typeof v === "number" && v >= (+h.min || 0) && v > 0;
+  if (h.type === "Minutes" || h.type === "Hours") return typeof v === "number" && v >= (+h.min || 0) && v > 0;
   if (h.type === "Avoid") return isLogged(day) && !v;
   return !!v;
 }
 function dayPoints(day) {
   if (!isLogged(day) || day.off) return null;
-  return habitsFor(day).reduce((a, h) => a + (isDone(h, day) ? (+h.pts || 0) : 0), 0);
+  return r1(habitsFor(day).reduce((a, h) => a + habitPts(h, day), 0));
 }
 const g = (o, a, b) => (o && o[a] && typeof o[a][b] === "number") ? o[a][b] : null;
 function pokerOf(day) {
@@ -359,7 +371,7 @@ function computeStats(Y = curYear()) {
   let asof = start;
   for (const [k, d] of S.days) if (k >= start && k <= end && k > asof && isLogged(d)) asof = k;
   const N = Math.max(0, diffDays(start, asof)) + 1;
-  const per = hs.map(h => ({ h, done: 0, days: 0, n30: 0, streak: 0, best: 0, strength: 0, mins: 0, d7: 0, d30: 0, wk: 0,
+  const per = hs.map(h => ({ h, done: 0, days: 0, n30: 0, streak: 0, best: 0, strength: 0, mins: 0, hrs: 0, d7: 0, d30: 0, wk: 0,
     net: { y: [], n: [] }, ov: { y: [], n: [] }, fo: { y: [], n: [] } }));
   const weekStart = addDays(start, 7 * Math.floor(diffDays(start, asof) / 7));
   let logged = 0, off = 0, on = 0, hit = 0, tStreak = 0, tBest = 0, on7 = 0, on30 = 0, pts = [], pcts = [], pts7 = [];
@@ -397,6 +409,7 @@ function computeStats(Y = curYear()) {
       x.streak = dn ? x.streak + 1 : (skip ? x.streak : 0); x.best = Math.max(x.best, x.streak);
       x.strength = skip ? x.strength : x.strength * DECAY + (dn ? 1 - DECAY : 0);
       if (x.h.type === "Minutes" && day.h && typeof day.h[x.h.id] === "number") x.mins += day.h[x.h.id];
+      if (x.h.type === "Hours" && ap && day.h && typeof day.h[x.h.id] === "number") x.hrs += day.h[x.h.id];
     });
     const pk = pokerOf(day);
     if (pk.on.won != null) { P.onN++; P.onWon += pk.on.won; P.hands += pk.on.hands || 0; P.onBB += pk.onBB || 0; }
@@ -540,9 +553,20 @@ function renderToday() {
   shownHabits.forEach(h => {
     const row = el("div", { class: "habit", "data-id": h.id });
     const tick = el("span", { class: "tick", html: h.type === "Avoid" ? CROSS : CHECK });
-    const name = el("span", { class: "name" }, h.name, el("small", { text: h.type === "Minutes" ? `${h.cat || ""}${h.cat ? " · " : ""}goal ${h.min || 0} min` : h.type === "Avoid" ? "Tap only if you slipped" : (h.cat || "") }));
-    const pts = el("span", { class: "pts", text: `${h.pts} pt${+h.pts === 1 ? "" : "s"}` });
-    if (h.type === "Minutes") {
+    const name = el("span", { class: "name" }, h.name, el("small", { text: h.type === "Minutes" ? `${h.cat || ""}${h.cat ? " · " : ""}goal ${h.min || 0} min` : h.type === "Hours" ? `${ptsLabel(h)} · up to ${hoursCap(h)} h` : h.type === "Avoid" ? "Tap only if you slipped" : (h.cat || "") },
+      h.type === "Hours" ? el("b", { class: "hp", id: "hp-" + h.id }) : null));
+    const pts = el("span", { class: "pts", text: ptsLabel(h) });
+    if (h.type === "Hours") {
+      const cur = day.h && typeof day.h[h.id] === "number" ? day.h[h.id] : "";
+      const inp = el("input", { type: "number", inputmode: "decimal", min: "0", step: "0.5", value: cur, "aria-label": h.name + " hours", id: "m-" + h.id });
+      const setH = v => mutate(d => { d.h = d.h || {}; if (v == null || v <= 0) delete d.h[h.id]; else d.h[h.id] = r1(v); });
+      inp.addEventListener("input", () => setH(num(inp.value)));
+      const step = dlt => { const v = Math.max(0, r1((num(inp.value) || 0) + dlt)); inp.value = v || ""; setH(v); };
+      const stepper = el("span", { class: "stepper" }, el("button", { type: "button", "aria-label": "Half an hour less", text: "−", onclick: () => step(-0.5) }), inp, el("button", { type: "button", "aria-label": "Half an hour more", text: "+", onclick: () => step(0.5) }));
+      row.append(tick, name, stepper);
+      row.style.gridTemplateColumns = "30px 1fr auto";
+      row.addEventListener("click", e => { if (e.target === row || e.target.closest(".name") || e.target.closest(".tick")) inp.focus(); });
+    } else if (h.type === "Minutes") {
       const cur = day.h && typeof day.h[h.id] === "number" ? day.h[h.id] : "";
       const inp = el("input", { type: "number", inputmode: "numeric", min: "0", value: cur, "aria-label": h.name + " minutes", id: "m-" + h.id });
       const setM = v => mutate(d => { d.h = d.h || {}; if (v == null || v <= 0) delete d.h[h.id]; else d.h[h.id] = v; });
@@ -599,7 +623,7 @@ function renderToday() {
 function refreshToday() {
   if (S.view !== "today" || !$("#habitList")) return;
   const c = cfg(), day = getDay(S.date), poss = possibleFor(day), p = dayPoints(day), tgt = targetFor(day);
-  const pts = habitsFor(day).reduce((a, h) => a + (isDone(h, day) ? (+h.pts || 0) : 0), 0);
+  const pts = r1(habitsFor(day).reduce((a, h) => a + habitPts(h, day), 0));
   const shown = p == null ? pts : p;
   $("#scoreBig").innerHTML = ""; $("#scoreBig").append(String(shown), el("small", { text: ` / ${poss}` }));
   const bar = $("#scoreBar"); bar.firstChild.style.width = (poss ? Math.min(100, shown / poss * 100) : 0) + "%";
@@ -617,6 +641,8 @@ function refreshToday() {
     const done = isDone(h, day);
     row.classList.toggle("done", done);
     row.classList.toggle("slip", h.type === "Avoid" && !!v);
+    const hp = document.getElementById("hp-" + h.id);
+    if (hp) { const e = habitPts(h, day); hp.textContent = e ? ` · ${e} pt${e === 1 ? "" : "s"}` : ""; }
     if (row.getAttribute("role") === "button") row.setAttribute("aria-pressed", String(!!v));
   });
   const pk = pokerOf(day), r = day.r || {};
@@ -689,7 +715,8 @@ function renderStats() {
         el("span", {}, "All-time ", el("b", { text: pct(x.days ? x.done / x.days : null) })),
         daysLabel(x.h) ? el("span", { text: daysLabel(x.h) }) : null,
         el("span", {}, "Streak ", el("b", { text: `${x.streak}` }), ` · best ${x.best}`),
-        x.h.type === "Minutes" ? el("span", {}, el("b", { text: n1(x.mins / 60) }), " hrs total") : null)));
+        x.h.type === "Minutes" ? el("span", {}, el("b", { text: n1(x.mins / 60) }), " hrs total") : null,
+        x.h.type === "Hours" ? el("span", {}, el("b", { text: n1(x.hrs) }), " hrs total") : null)));
   });
   root.push(hc);
 
@@ -829,23 +856,30 @@ function renderSetup() {
     const t = S.setupTab, mine = c.habits.filter(h => h.days[t]), others = c.habits.filter(h => !h.days[t]);
     const tk = TARGET_KEY[t];
     const total = el("p", { class: "calc" });
-    const drawTotal = () => { const sum = c.habits.filter(h => h.days[t] && (h.name || "").trim()).reduce((a, h) => a + (+h.pts || 0), 0); total.innerHTML = `Points possible on ${dayNoun(t)}: <b>${sum}</b>`; };
+    const drawTotal = () => { const sum = r1(c.habits.filter(h => h.days[t] && (h.name || "").trim()).reduce((a, h) => a + habitMax(h), 0)); total.innerHTML = `Points possible on ${dayNoun(t)}: <b>${sum}</b>`; };
     const list = el("div", { style: "display:grid;gap:10px" });
     mine.forEach((h, n) => {
       const id = "h-" + h.id;
+      const hn = h.type === "Hours" ? el("p", { class: "note", text: hoursNote(h) }) : null;
       const inp = (label, key, attrs = {}) => { const x = el("input", { id: `${id}-${key}`, value: h[key] == null ? "" : h[key], ...attrs });
-        x.addEventListener("input", () => { h[key] = attrs.type === "number" ? num(x.value) : x.value; drawTotal(); });
+        x.addEventListener("input", () => { h[key] = attrs.type === "number" ? num(x.value) : x.value; drawTotal(); if (hn) hn.textContent = hoursNote(h); });
         return el("div", { class: "field" }, el("label", { for: `${id}-${key}`, text: label }), x); };
-      const sel = el("select", { id: `${id}-type` }, ...["Check", "Minutes", "Avoid"].map(v => el("option", { value: v, selected: h.type === v, text: v })));
-      sel.addEventListener("change", () => { h.type = sel.value; drawPane(); });
+      const sel = el("select", { id: `${id}-type` }, ...["Check", "Minutes", "Hours", "Avoid"].map(v => el("option", { value: v, selected: h.type === v, text: v })));
+      sel.addEventListener("change", () => { h.type = sel.value; if (h.type === "Hours" && !(+h.max > 0)) h.max = HOURS_CAP; drawPane(); });
       const swap = dir => { const a = c.habits.indexOf(h), b = c.habits.indexOf(mine[n + dir]); [c.habits[a], c.habits[b]] = [c.habits[b], c.habits[a]]; drawPane(); };
       list.append(el("div", { class: "hedit" },
         inp("Habit", "name"),
-        el("div", { class: "grid3" }, inp("Category", "cat"), inp("Points", "pts", { type: "number", step: "1", inputmode: "numeric" }),
+        el("div", { class: "grid3" }, inp("Category", "cat"), inp(h.type === "Hours" ? "Pts / hour" : "Points", "pts", { type: "number", step: h.type === "Hours" ? "0.5" : "1", inputmode: "decimal" }),
           el("div", { class: "field" }, el("label", { for: `${id}-type`, text: "Type" }), sel)),
-        el("div", { class: "grid2" },
-          h.type === "Minutes" ? inp("Min. minutes", "min", { type: "number", step: "1", inputmode: "numeric" }) : el("p", { class: "note", text: h.type === "Avoid" ? "Counts as done unless you mark a slip." : "Done when you tap it." }),
-          inp("Times / week", "tpw", { type: "number", step: "1", min: "1", max: "7", inputmode: "numeric" })),
+        h.type === "Hours"
+          ? el("div", { class: "grid3" },
+              inp("Max hours", "max", { type: "number", step: "0.5", min: "0.5", inputmode: "decimal" }),
+              inp("Min. hours", "min", { type: "number", step: "0.5", min: "0", inputmode: "decimal" }),
+              inp("Times / week", "tpw", { type: "number", step: "1", min: "1", max: "7", inputmode: "numeric" }))
+          : el("div", { class: "grid2" },
+              h.type === "Minutes" ? inp("Min. minutes", "min", { type: "number", step: "1", inputmode: "numeric" }) : el("p", { class: "note", text: h.type === "Avoid" ? "Counts as done unless you mark a slip." : "Done when you tap it." }),
+              inp("Times / week", "tpw", { type: "number", step: "1", min: "1", max: "7", inputmode: "numeric" })),
+        hn,
         el("div", { class: "field" }, el("span", { class: "lbl", text: "Counts on" }),
           el("div", { class: "daychips" }, ...TYPES.map(k => el("button", { type: "button", "aria-pressed": String(!!h.days[k]), disabled: k === t, text: DAY_LABEL[k],
             onclick: () => { h.days[k] = !h.days[k]; drawPane(); } })))),
@@ -861,7 +895,7 @@ function renderSetup() {
     const card = el("section", { class: "card" },
       el("h3", { class: "sub", text: t === "off" ? "Days off" : dayNoun(t) }),
       el("div", { class: "grid2" }, f(t === "off" ? "Day off target" : `${DAY_LABEL[t]} day target`, tk, "number", "1")),
-      el("p", { class: "note", text: "Check: tap when done. Minutes: done at the minimum. Avoid: a habit to quit; mark only slips." }),
+      el("p", { class: "note", text: "Check: tap when done. Minutes: done at the minimum. Hours: points for each hour logged. Avoid: a habit to quit; mark only slips." }),
       list, total,
       el("button", { type: "button", class: "btn ghost", onclick: () => { c.habits.push({ id: "h" + Date.now().toString(36), name: "", cat: "", pts: 1, type: "Check", min: null, tpw: 7, days: { np: false, poker: false, off: false, [t]: true } }); drawPane(); const ins = pane.querySelectorAll(".hedit"); if (ins.length) ins[ins.length - 1].querySelector("input").focus(); }, text: `+ New habit for ${dayNoun(t)}` }));
     const rest = others.filter(h => (h.name || "").trim());
@@ -869,7 +903,7 @@ function renderSetup() {
       el("h3", { class: "sub", text: `Not on ${dayNoun(t)}` }),
       el("p", { class: "note", text: "Your other habits. Add one to count it on this day type too." }),
       ...rest.map(h => el("div", { class: "row", style: "border-top:1px solid var(--line);padding-top:8px" },
-        el("span", { style: "font-weight:700;flex:1;min-width:0", text: h.name }), el("span", { class: "note", text: `${+h.pts || 0} pt${+h.pts === 1 ? "" : "s"}` }),
+        el("span", { style: "font-weight:700;flex:1;min-width:0", text: h.name }), el("span", { class: "note", text: ptsLabel(h) }),
         el("button", { type: "button", class: "btn ghost", style: "padding:6px 12px", onclick: () => { h.days[t] = true; drawPane(); }, text: "+ Add" })))) : null;
     pane.replaceChildren(card, ...(other ? [other] : []));
   };
@@ -913,7 +947,7 @@ async function exportCsv() {
   for (const k of keys) {
     const d = getDay(k); if (!isLogged(d)) continue;
     const pk = pokerOf(d), r = d.r || {}, v = (o, a) => o && typeof o[a] === "number" ? o[a] : "";
-    rows.push([k, { off: "Day off", poker: "Poker", np: "Non-poker" }[dayType(d)], ...hs.map(h => { const x = d.h ? d.h[h.id] : undefined; return h.type === "Minutes" ? (typeof x === "number" ? x : "") : h.type === "Avoid" ? (x ? "slip" : "") : (x ? "x" : ""); }),
+    rows.push([k, { off: "Day off", poker: "Poker", np: "Non-poker" }[dayType(d)], ...hs.map(h => { const x = d.h ? d.h[h.id] : undefined; return h.type === "Minutes" || h.type === "Hours" ? (typeof x === "number" ? x : "") : h.type === "Avoid" ? (x ? "slip" : "") : (x ? "x" : ""); }),
       dayPoints(d) ?? "", v(r, "focus"), v(r, "energy"), v(r, "disc"), v(r, "overall"), v(r, "stress"), v(r, "mood"), typeof d.study === "number" ? d.study : "",
       v(d.on, "hands"), v(d.on, "bb"), v(d.on, "won"), v(d.lv, "hrs"), v(d.lv, "bb"), v(d.lv, "won"), v(d.mt, "hrs"), v(d.mt, "buy"), v(d.mt, "cash"), pk.net ?? "",
       v(d.sl, "hrs"), v(d.sl, "score"), v(d.sl, "ready"), v(d.sl, "hrv"), v(d.sl, "rhr"), typeof d.wt === "number" ? d.wt : "",
