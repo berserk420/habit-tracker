@@ -94,10 +94,9 @@ h3.sub { margin: 0; font-size: 15px; font-weight: 800; }
 .seg.light button { color: var(--ink); }
 .seg.light button[aria-checked="true"] { background: var(--ink); color: var(--paper); }
 .seg.light button[data-v="poker"][aria-checked="true"] { background: var(--orange); color: #282825; }
-.daychips { display: flex; gap: 6px; flex-wrap: wrap; }
-.daychips button { border: 1px solid var(--line); background: var(--card); border-radius: 999px; padding: 6px 12px; font-size: 13px; font-weight: 700; color: var(--muted); }
-.daychips button[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--paper); }
-.daychips button:disabled { opacity: 1; cursor: default; }
+.copyrow { display: flex; align-items: center; gap: 10px; border-top: 1px solid var(--line); padding-top: 10px; }
+.copyrow .nm { flex: 1; min-width: 0; font-weight: 700; }
+.copyrow .nm small { display: block; font-weight: 500; font-size: 12px; color: var(--muted); }
 .switch { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; font-size: 13px; }
 .switch input { appearance: none; width: 42px; height: 24px; border-radius: 99px; background: color-mix(in srgb, var(--panel-ink) 22%, transparent); position: relative; margin: 0; transition: background .2s; }
 .switch input::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: var(--panel-ink); transition: transform .2s; }
@@ -302,7 +301,26 @@ const TARGET_KEY = { np: "target", poker: "pokerTarget", off: "offTarget" };
 const targetFor = day => { const c = cfg(), v = c[TARGET_KEY[dayType(day)]]; return v != null && v !== "" ? +v : dayType(day) === "off" ? 0 : (+c.target || 0); };
 const DAY_LABEL = { np: "Non-poker", poker: "Poker", off: "Day off" };
 const dayNoun = t => t === "off" ? "days off" : `${DAY_LABEL[t]} days`;
-const daysLabel = h => { const d = habitDays(h), on = Object.keys(DAY_LABEL).filter(k => d[k]); return on.length === 3 ? "" : on.length ? on.map(k => DAY_LABEL[k]).join(" + ") + " only" : "No day type"; };
+const DAY_TYPES = ["np", "poker", "off"];
+const typeOf = h => DAY_TYPES.find(t => habitDays(h)[t]) || "np";
+const newId = () => "h" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+/* A day is one type, and each type keeps its own habits. Older setups could share one habit between types:
+   give each type its own copy (the first keeps the id, the others get "<id>-<type>"). On the phone, shim.js
+   does the same split once and moves past days' marks onto the copy for that day's type. */
+function splitHabits(list) {
+  const out = { np: [], poker: [], off: [] }, ids = new Set(list.map(h => h && h.id));
+  for (const h of list) {
+    if (!h) continue;
+    const d = habitDays(h);
+    DAY_TYPES.filter(t => d[t]).forEach((t, i) => {
+      let id = h.id;
+      if (i) { id = `${h.id}-${t}`; for (let n = 2; ids.has(id); n++) id = `${h.id}-${t}${n}`; ids.add(id); }
+      const cp = JSON.parse(JSON.stringify(h)); delete cp.on; cp.id = id; cp.days = { np: t === "np", poker: t === "poker", off: t === "off" };
+      out[t].push(cp);
+    });
+  }
+  return [...out.np, ...out.poker, ...out.off];
+}
 
 /* ---------- day logic (mirrors the Excel workbook) ---------- */
 function hasData(o) {
@@ -375,6 +393,7 @@ function computeStats(Y = curYear()) {
     net: { y: [], n: [] }, ov: { y: [], n: [] }, fo: { y: [], n: [] } }));
   const weekStart = addDays(start, 7 * Math.floor(diffDays(start, asof) / 7));
   let logged = 0, off = 0, on = 0, hit = 0, tStreak = 0, tBest = 0, on7 = 0, on30 = 0, pts = [], pcts = [], pts7 = [];
+  const typeN = { np: 0, poker: 0, off: 0 };
   const series = [];
   const P = { onN: 0, hands: 0, onWon: 0, onBB: 0, lvN: 0, lvHrs: 0, lvWon: 0, lvBB: 0, mtN: 0, mtHrs: 0, mtBuy: 0, mtNet: 0, days: 0, net: 0 };
   const ins = { hit: {}, miss: {} };
@@ -387,7 +406,7 @@ function computeStats(Y = curYear()) {
   for (let i = 0; i < N; i++) {
     const k = addDays(start, i), day = getDay(k), lg = isLogged(day), isOff = lg && !!day.off, isOn = lg && !isOff;
     const in7 = diffDays(k, asof) < 7, in30 = diffDays(k, asof) < 30, inWk = k >= weekStart;
-    if (lg) logged++; if (isOff) off++; if (isOn) { on++; if (in7) on7++; if (in30) on30++; }
+    if (lg) { logged++; typeN[dayType(day)]++; } if (isOff) off++; if (isOn) { on++; if (in7) on7++; if (in30) on30++; }
     const p = isOn ? dayPoints(day) : null, poss = possibleFor(day);
     const isHit = p != null && p >= targetFor(day);
     if (p != null) { pts.push(p); pcts.push(poss ? p / poss : 0); if (in7) pts7.push(p); }
@@ -432,7 +451,7 @@ function computeStats(Y = curYear()) {
     if (p != null && poss) month[mk].pcts.push(p / poss); month[mk].net += pk.net || 0;
   }
   const avg = a => a.length ? a.reduce((x, y) => x + y, 0) / a.length : null;
-  return { Y, start, asof, N, logged, off, on, hit, tStreak, tBest, on7, on30, weekStart, per, P, series, month,
+  return { Y, start, asof, N, logged, off, on, hit, tStreak, tBest, on7, on30, weekStart, per, P, series, month, typeN,
     avgPts: avg(pts), avgPct: avg(pcts), avg7: avg(pts7), hitRate: on ? hit / on : null,
     ins, avg, ratings, sleep, wts, cals, study, sumStudy: study.reduce((a, b) => a + b, 0) };
 }
@@ -696,28 +715,42 @@ function renderStats() {
   }
   root.push(el("div", { class: "vhead" }, el("div", {}, el("p", { class: "eyebrow", text: `As of ${fmtLong(st.asof)}` }), el("h2", { class: "title", text: `How ${st.Y} is going` })), yearSwitch()));
   const kpi = (v, k, accent) => el("div", { class: "kpi" + (accent ? " accent" : "") }, el("span", { class: "v num", text: v }), el("span", { class: "k", text: k }));
-  const avgStrength = st.per.length ? st.per.reduce((a, x) => a + x.strength, 0) / st.per.length : null;
+  const active = st.per.filter(x => x.days > 0);
+  const avgStrength = active.length ? active.reduce((a, x) => a + x.strength, 0) / active.length : null;
   root.push(el("div", { class: "kpis" },
     kpi(n1(st.avgPts), `Avg points · target ${c.target}`, true), kpi(pct(st.hitRate), `Target hit · ${st.hit} days`),
     kpi(`${st.tStreak} / ${st.tBest}`, "Target streak now / best"), kpi(pct(avgStrength), "Avg habit strength"),
     kpi(String(st.logged), `Days logged · ${st.off} off`), kpi(money(st.P.net), "Poker net")));
 
-  const hc = el("section", { class: "card" }, el("div", { class: "row" }, el("h3", { class: "sub", text: "Habits" }), el("span", { class: "spacer" }), el("span", { class: "note", text: "Bar = strength" })));
-  st.per.forEach(x => {
-    const tpw = +x.h.tpw || 7;
-    hc.append(el("div", { class: "hrow" },
-      el("span", { class: "nm", text: x.h.name }),
-      el("span", { class: "wk" + (x.wk >= tpw ? " met" : ""), text: `${x.wk} / ${tpw} this wk` }),
-      el("div", { class: "meter", title: "Habit strength " + pct(x.strength) }, el("span", { style: `width:${Math.round(x.strength * 100)}%` })),
-      el("div", { class: "facts" },
-        el("span", {}, "Strength ", el("b", { text: pct(x.strength) })),
-        el("span", {}, "30 days ", el("b", { text: pct(x.n30 ? x.d30 / x.n30 : null) })),
-        el("span", {}, "All-time ", el("b", { text: pct(x.days ? x.done / x.days : null) })),
-        daysLabel(x.h) ? el("span", { text: daysLabel(x.h) }) : null,
-        el("span", {}, "Streak ", el("b", { text: `${x.streak}` }), ` · best ${x.best}`),
-        x.h.type === "Minutes" ? el("span", {}, el("b", { text: n1(x.mins / 60) }), " hrs total") : null,
-        x.h.type === "Hours" ? el("span", {}, el("b", { text: n1(x.hrs) }), " hrs total") : null)));
-  });
+  /* Habits, one day type at a time, since each type has its own list. Opens on the type of the last logged day. */
+  if (!DAY_TYPES.includes(S.statsTab)) {
+    const lt = dayType(getDay(st.asof));
+    S.statsTab = st.per.some(x => habitDays(x.h)[lt]) ? lt : DAY_TYPES.find(t => st.per.some(x => habitDays(x.h)[t])) || "np";
+  }
+  const hc = el("section", { class: "card" });
+  const drawHabits = () => {
+    const t = S.statsTab, rows = st.per.filter(x => habitDays(x.h)[t]), n = st.typeN[t];
+    hc.replaceChildren(
+      el("div", { class: "row" }, el("h3", { class: "sub", text: "Habits" }), el("span", { class: "spacer" }), el("span", { class: "note", text: "Bar = strength" })),
+      el("div", { class: "seg light", role: "tablist", "aria-label": "Day type" }, ...DAY_TYPES.map(k => el("button", { type: "button", role: "tab", "data-v": k, "aria-selected": String(k === t), "aria-checked": String(k === t), text: DAY_LABEL[k],
+        onclick: () => { S.statsTab = k; drawHabits(); } }))),
+      el("p", { class: "note", text: `${n} ${n === 1 ? (t === "off" ? "day off" : DAY_LABEL[t] + " day") : dayNoun(t)} logged in ${st.Y}.` }),
+      ...(rows.length ? rows.map(x => {
+        const tpw = +x.h.tpw || 7;
+        return el("div", { class: "hrow" },
+          el("span", { class: "nm", text: x.h.name }),
+          el("span", { class: "wk" + (x.wk >= tpw ? " met" : ""), text: `${x.wk} / ${tpw} this wk` }),
+          el("div", { class: "meter", title: "Habit strength " + pct(x.strength) }, el("span", { style: `width:${Math.round(x.strength * 100)}%` })),
+          el("div", { class: "facts" },
+            el("span", {}, "Strength ", el("b", { text: pct(x.strength) })),
+            el("span", {}, "30 days ", el("b", { text: pct(x.n30 ? x.d30 / x.n30 : null) })),
+            el("span", {}, "All-time ", el("b", { text: pct(x.days ? x.done / x.days : null) })),
+            el("span", {}, "Streak ", el("b", { text: `${x.streak}` }), ` · best ${x.best}`),
+            x.h.type === "Minutes" ? el("span", {}, el("b", { text: n1(x.mins / 60) }), " hrs total") : null,
+            x.h.type === "Hours" ? el("span", {}, el("b", { text: n1(x.hrs) }), " hrs total") : null));
+      }) : [el("p", { class: "note", text: `No habits on ${dayNoun(t)}. Add them in Setup.` })]));
+  };
+  drawHabits();
   root.push(hc);
 
   const P = st.P, hrs = P.lvHrs + P.mtHrs;
@@ -744,9 +777,12 @@ function renderStats() {
       return el("tr", {}, el("td", { text: lab }), el("td", { class: a != null && b != null && a > b ? "better" : null, text: f(a) }), el("td", { text: f(b) })); }))));
   root.push(ic);
 
-  /* Which habits pay off: poker $/day on days a habit was done vs skipped */
+  /* Which habits pay off: poker $/day on days a habit was done vs skipped. Only habits on days with poker results;
+     a name used on more than one day type gets the type added. */
   const MIN_N = 3;
-  const rowsPay = st.per.map(x => {
+  const nameN = {}; hs.forEach(h => { const k = h.name.trim().toLowerCase(); nameN[k] = (nameN[k] || 0) + 1; });
+  const tagged = h => nameN[h.name.trim().toLowerCase()] > 1 ? `${h.name} (${DAY_LABEL[typeOf(h)]})` : h.name;
+  const rowsPay = st.per.filter(x => x.net.y.length + x.net.n.length > 0).map(x => {
     const y = A(x.net.y), n = A(x.net.n);
     const ok = x.net.y.length >= MIN_N && x.net.n.length >= MIN_N;
     return { x, y, n, ok, diff: ok ? y - n : null, ovY: A(x.ov.y), ovN: A(x.ov.n), foY: A(x.fo.y), foN: A(x.fo.n) };
@@ -761,7 +797,7 @@ function renderStats() {
     const avoid = r.x.h.type === "Avoid", w = Math.round(Math.abs(r.diff) / maxAbs * 50);
     const sign = r.diff >= 0 ? "+" : "−";
     pay.append(el("div", { class: "pay" },
-      el("div", { class: "row" }, el("span", { class: "nm", text: r.x.h.name }), el("span", { class: "spacer" }),
+      el("div", { class: "row" }, el("span", { class: "nm", text: tagged(r.x.h) }), el("span", { class: "spacer" }),
         el("b", { class: "num " + (r.diff >= 0 ? "pos" : "neg"), text: `${sign}$${Math.abs(Math.round(r.diff)).toLocaleString()} / day` })),
       el("div", { class: "div-bar", "aria-hidden": "true" }, el("i"),
         el("span", { class: r.diff >= 0 ? "up" : "down", style: r.diff >= 0 ? `left:50%;width:${w}%` : `right:50%;width:${w}%` })),
@@ -771,7 +807,7 @@ function renderStats() {
         r.ovY != null && r.ovN != null ? el("span", {}, "Overall ", el("b", { text: n1(r.ovY) }), ` vs ${n1(r.ovN)}`) : null,
         r.foY != null && r.foN != null ? el("span", {}, "Focus ", el("b", { text: n1(r.foY) }), ` vs ${n1(r.foN)}`) : null)));
   });
-  if (ready.length && waiting.length) pay.append(el("p", { class: "note", text: "Not enough data yet: " + waiting.map(r => r.x.h.name).join(", ") + "." }));
+  if (ready.length && waiting.length) pay.append(el("p", { class: "note", text: "Not enough data yet: " + waiting.map(r => tagged(r.x.h)).join(", ") + "." }));
   root.push(pay);
 
   const months = []; for (let i = 0; i < 12; i++) months.push(`${st.Y}-${pad(i + 1)}`);
@@ -844,16 +880,16 @@ function renderSetup() {
     el("div", { class: "grid2" }, f("Tracking since", "start", "date"), f("Calorie target", "calories", "number", "50"),
       f("Sleep goal (hours)", "sleepGoal", "number", "0.25"), f("Goal weight", "goalWeight", "number", "0.1"), f("Poker profit goal $", "profitGoal", "number", "100"))));
 
-  // Habits keep a days map; convert older "on" values once so every tab edits the same objects.
-  c.habits.forEach(h => { h.days = habitDays(h); delete h.on; });
-  const TYPES = ["np", "poker", "off"];
+  // Each day type has its own habits; split any habit an older setup shared between types.
+  c.habits = splitHabits(c.habits);
+  const TYPES = DAY_TYPES;
   if (!TYPES.includes(S.setupTab)) S.setupTab = "np";
   const tabs = el("div", { class: "seg light", role: "tablist", "aria-label": "Day type" });
   const pane = el("div", { style: "display:grid;gap:14px" });
   const drawTabs = () => tabs.replaceChildren(...TYPES.map(t => el("button", { type: "button", role: "tab", "data-v": t, "aria-selected": String(S.setupTab === t), "aria-checked": String(S.setupTab === t), text: DAY_LABEL[t],
     onclick: () => { S.setupTab = t; drawTabs(); drawPane(); } })));
   const drawPane = () => {
-    const t = S.setupTab, mine = c.habits.filter(h => h.days[t]), others = c.habits.filter(h => !h.days[t]);
+    const t = S.setupTab, mine = c.habits.filter(h => h.days[t]);
     const tk = TARGET_KEY[t];
     const total = el("p", { class: "calc" });
     const drawTotal = () => { const sum = r1(c.habits.filter(h => h.days[t] && (h.name || "").trim()).reduce((a, h) => a + habitMax(h), 0)); total.innerHTML = `Points possible on ${dayNoun(t)}: <b>${sum}</b>`; };
@@ -880,15 +916,11 @@ function renderSetup() {
               h.type === "Minutes" ? inp("Min. minutes", "min", { type: "number", step: "1", inputmode: "numeric" }) : el("p", { class: "note", text: h.type === "Avoid" ? "Counts as done unless you mark a slip." : "Done when you tap it." }),
               inp("Times / week", "tpw", { type: "number", step: "1", min: "1", max: "7", inputmode: "numeric" })),
         hn,
-        el("div", { class: "field" }, el("span", { class: "lbl", text: "Counts on" }),
-          el("div", { class: "daychips" }, ...TYPES.map(k => el("button", { type: "button", "aria-pressed": String(!!h.days[k]), disabled: k === t, text: DAY_LABEL[k],
-            onclick: () => { h.days[k] = !h.days[k]; drawPane(); } })))),
         el("div", { class: "row" },
           el("button", { type: "button", disabled: n === 0, onclick: () => swap(-1), text: "Move up" }),
           el("button", { type: "button", disabled: n === mine.length - 1, onclick: () => swap(1), text: "Move down" }),
           el("span", { class: "spacer" }),
-          el("button", { type: "button", onclick: () => { h.days[t] = false; drawPane(); }, text: "Remove from this day" }),
-          el("button", { type: "button", style: "color:var(--coral)", onclick: () => { if (confirm(`Delete "${h.name || "this habit"}" from every day type? Past days keep their record.`)) { c.habits.splice(c.habits.indexOf(h), 1); drawPane(); } }, text: "Delete" }))));
+          el("button", { type: "button", style: "color:var(--coral)", onclick: () => { if (!(h.name || "").trim() || confirm(`Delete "${h.name.trim()}" from ${dayNoun(t)}?`)) { c.habits.splice(c.habits.indexOf(h), 1); drawPane(); } }, text: "Delete" }))));
     });
     if (!mine.length) list.append(el("p", { class: "note", text: t === "off" ? "No habits count on days off, so they're rest days. Add one below if you want to track something on days off." : `No habits count on ${dayNoun(t)} yet.` }));
     drawTotal();
@@ -897,18 +929,24 @@ function renderSetup() {
       el("div", { class: "grid2" }, f(t === "off" ? "Day off target" : `${DAY_LABEL[t]} day target`, tk, "number", "1")),
       el("p", { class: "note", text: "Check: tap when done. Minutes: done at the minimum. Hours: points for each hour logged. Avoid: a habit to quit; mark only slips." }),
       list, total,
-      el("button", { type: "button", class: "btn ghost", onclick: () => { c.habits.push({ id: "h" + Date.now().toString(36), name: "", cat: "", pts: 1, type: "Check", min: null, tpw: 7, days: { np: false, poker: false, off: false, [t]: true } }); drawPane(); const ins = pane.querySelectorAll(".hedit"); if (ins.length) ins[ins.length - 1].querySelector("input").focus(); }, text: `+ New habit for ${dayNoun(t)}` }));
-    const rest = others.filter(h => (h.name || "").trim());
+      el("button", { type: "button", class: "btn ghost", onclick: () => { c.habits.push({ id: newId(), name: "", cat: "", pts: 1, type: "Check", min: null, tpw: 7, days: { np: false, poker: false, off: false, [t]: true } }); drawPane(); const ins = pane.querySelectorAll(".hedit"); if (ins.length) ins[ins.length - 1].querySelector("input").focus(); }, text: `+ New habit for ${dayNoun(t)}` }));
+    // Habits from the other day types that this type doesn't have yet (matched by name). Copying makes a separate habit.
+    const have = new Set(mine.map(h => (h.name || "").trim().toLowerCase())), rest = [];
+    for (const h of c.habits) { const k = (h.name || "").trim().toLowerCase(); if (!h.days[t] && k && !have.has(k)) { have.add(k); rest.push(h); } }
     const other = rest.length ? el("section", { class: "card" },
-      el("h3", { class: "sub", text: `Not on ${dayNoun(t)}` }),
-      el("p", { class: "note", text: "Your other habits. Add one to count it on this day type too." }),
-      ...rest.map(h => el("div", { class: "row", style: "border-top:1px solid var(--line);padding-top:8px" },
-        el("span", { style: "font-weight:700;flex:1;min-width:0", text: h.name }), el("span", { class: "note", text: ptsLabel(h) }),
-        el("button", { type: "button", class: "btn ghost", style: "padding:6px 12px", onclick: () => { h.days[t] = true; drawPane(); }, text: "+ Add" })))) : null;
+      el("h3", { class: "sub", text: "Copy from another day type" }),
+      el("p", { class: "note", text: `Adds a separate copy to ${dayNoun(t)}. Changing the copy won't change the original.` }),
+      ...rest.map(h => el("div", { class: "copyrow" },
+        el("span", { class: "nm" }, h.name, el("small", { text: `${DAY_LABEL[typeOf(h)]} · ${ptsLabel(h)}` })),
+        el("button", { type: "button", class: "btn ghost", style: "padding:6px 12px", onclick: () => {
+          const cp = JSON.parse(JSON.stringify(h)); cp.id = newId(); cp.days = { np: t === "np", poker: t === "poker", off: t === "off" };
+          c.habits.push(cp); drawPane();
+        }, text: "+ Copy" })))) : null;
     pane.replaceChildren(card, ...(other ? [other] : []));
   };
   drawTabs(); drawPane();
-  root.push(el("div", { style: "display:grid;gap:8px" }, el("h3", { class: "sub", text: "Habits & targets by day type" }), tabs), pane);
+  root.push(el("div", { style: "display:grid;gap:8px" }, el("h3", { class: "sub", text: "Habits & targets by day type" }),
+    el("p", { class: "note", text: "A day is one type, and each type has its own habits. Changes on one tab don't touch the others." }), tabs), pane);
 
   root.push(el("div", { class: "row" },
     el("button", { type: "button", class: "btn", id: "saveSetup", onclick: async () => {
@@ -939,7 +977,7 @@ function renderSetup() {
 async function exportCsv() {
   if (!S.downloads) return toast("Downloads aren't available here. Open the tracker on claude.ai in a browser.");
   const hs = habits(), keys = [...S.days.keys()].sort();
-  const head = ["date", "day_type", ...hs.map(h => h.name), "points", "focus", "energy", "discipline", "overall", "stress", "mood", "study_hrs",
+  const head = ["date", "day_type", ...hs.map(h => `${h.name} (${DAY_LABEL[typeOf(h)]})`), "points", "focus", "energy", "discipline", "overall", "stress", "mood", "study_hrs",
     "online_hands", "online_bb", "online_won", "live_hrs", "live_bb", "live_won", "mtt_hrs", "mtt_buyins", "mtt_cashes", "poker_net",
     "sleep_hrs", "sleep_score", "readiness", "hrv", "resting_hr", "weight", "cal_breakfast", "cal_lunch", "cal_dinner", "cal_other", "notes"];
   const esc = v => v == null ? "" : /[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v);
