@@ -90,6 +90,14 @@ h3.sub { margin: 0; font-size: 15px; font-weight: 800; }
 .seg button { border: 0; border-radius: 999px; padding: 8px 4px; background: transparent; color: var(--panel-ink); font-weight: 800; font-size: 13px; min-height: 36px; }
 .seg button[aria-checked="true"] { background: var(--panel-ink); color: var(--panel); }
 .seg button[data-v="poker"][aria-checked="true"] { background: var(--orange); color: #282825; }
+.seg.light { background: var(--card); border: 1px solid var(--line); }
+.seg.light button { color: var(--ink); }
+.seg.light button[aria-checked="true"] { background: var(--ink); color: var(--paper); }
+.seg.light button[data-v="poker"][aria-checked="true"] { background: var(--orange); color: #282825; }
+.daychips { display: flex; gap: 6px; flex-wrap: wrap; }
+.daychips button { border: 1px solid var(--line); background: var(--card); border-radius: 999px; padding: 6px 12px; font-size: 13px; font-weight: 700; color: var(--muted); }
+.daychips button[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--paper); }
+.daychips button:disabled { opacity: 1; cursor: default; }
 .switch { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; font-size: 13px; }
 .switch input { appearance: none; width: 42px; height: 24px; border-radius: 99px; background: color-mix(in srgb, var(--panel-ink) 22%, transparent); position: relative; margin: 0; transition: background .2s; }
 .switch input::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: var(--panel-ink); transition: transform .2s; }
@@ -273,11 +281,16 @@ const possible = () => habits().reduce((a, h) => a + (+h.pts || 0), 0);
 /* Day types: Non-poker (default), Poker (day.type = "poker"), Day off (day.off). Habits say which days they count on. */
 const dayType = day => day && day.off ? "off" : day && day.type === "poker" ? "poker" : "np";
 const isPokerDay = day => dayType(day) === "poker";
-const appliesTo = (h, day) => { const o = h.on || "both"; return o === "both" || (o === "poker") === isPokerDay(day); };
+/* Which day types a habit counts on. Older setups stored h.on ("both" | "np" | "poker"). */
+const habitDays = h => h.days ? { np: !!h.days.np, poker: !!h.days.poker, off: !!h.days.off } : { np: h.on !== "poker", poker: h.on !== "np", off: false };
+const appliesTo = (h, day) => habitDays(h)[dayType(day)];
 const habitsFor = day => habits().filter(h => appliesTo(h, day));
 const possibleFor = day => habitsFor(day).reduce((a, h) => a + (+h.pts || 0), 0);
-const targetFor = day => { const c = cfg(); return isPokerDay(day) && c.pokerTarget != null && c.pokerTarget !== "" ? +c.pokerTarget : (+c.target || 0); };
-const ON_LABEL = { both: "Both", np: "Non-poker days", poker: "Poker days" };
+const TARGET_KEY = { np: "target", poker: "pokerTarget", off: "offTarget" };
+const targetFor = day => { const c = cfg(), v = c[TARGET_KEY[dayType(day)]]; return v != null && v !== "" ? +v : dayType(day) === "off" ? 0 : (+c.target || 0); };
+const DAY_LABEL = { np: "Non-poker", poker: "Poker", off: "Day off" };
+const dayNoun = t => t === "off" ? "days off" : `${DAY_LABEL[t]} days`;
+const daysLabel = h => { const d = habitDays(h), on = Object.keys(DAY_LABEL).filter(k => d[k]); return on.length === 3 ? "" : on.length ? on.map(k => DAY_LABEL[k]).join(" + ") + " only" : "No day type"; };
 
 /* ---------- day logic (mirrors the Excel workbook) ---------- */
 function hasData(o) {
@@ -293,7 +306,7 @@ const isLogged = day => hasData(day);
 function isDone(h, day) {
   const v = day.h ? day.h[h.id] : undefined;
   if (h.type === "Minutes") return typeof v === "number" && v >= (+h.min || 0) && v > 0;
-  if (h.type === "Avoid") return isLogged(day) && !day.off && !v;
+  if (h.type === "Avoid") return isLogged(day) && !v;
   return !!v;
 }
 function dayPoints(day) {
@@ -370,7 +383,7 @@ function computeStats(Y = curYear()) {
     tStreak = isHit ? tStreak + 1 : (isOff ? tStreak : 0); tBest = Math.max(tBest, tStreak);
     const pkDay = pokerOf(day), rDay = day.r || {};
     per.forEach(x => {
-      const ap = isOn && appliesTo(x.h, day), skip = isOff || (isOn && !ap);
+      const ap = lg && appliesTo(x.h, day), skip = lg && !ap;
       const dn = ap && isDone(x.h, day);
       if (ap) { x.days++; if (in30) x.n30++; }
       if (dn) { x.done++; if (in7) x.d7++; if (in30) x.d30++; }
@@ -523,7 +536,7 @@ function renderToday() {
 
   const list = el("div", { class: "habits", id: "habitList" });
   const shownHabits = habitsFor(day);
-  if (!shownHabits.length) list.append(el("p", { class: "note", text: "No habits are set to count on this type of day. Choose which days each habit counts on in Setup." }));
+  if (!shownHabits.length) list.append(el("p", { class: "note", text: day.off ? "Rest day. No habits count on days off; you can add some in Setup → Day off." : `No habits count on ${DAY_LABEL[dayType(day)]} days yet. Add them in Setup.` }));
   shownHabits.forEach(h => {
     const row = el("div", { class: "habit", "data-id": h.id });
     const tick = el("span", { class: "tick", html: h.type === "Avoid" ? CROSS : CHECK });
@@ -586,25 +599,24 @@ function renderToday() {
 function refreshToday() {
   if (S.view !== "today" || !$("#habitList")) return;
   const c = cfg(), day = getDay(S.date), poss = possibleFor(day), p = dayPoints(day), tgt = targetFor(day);
-  const pts = habitsFor(day).reduce((a, h) => a + (isDone(h, day) && !day.off ? (+h.pts || 0) : 0), 0);
-  const shown = day.off ? 0 : (p == null ? pts : p);
+  const pts = habitsFor(day).reduce((a, h) => a + (isDone(h, day) ? (+h.pts || 0) : 0), 0);
+  const shown = p == null ? pts : p;
   $("#scoreBig").innerHTML = ""; $("#scoreBig").append(String(shown), el("small", { text: ` / ${poss}` }));
   const bar = $("#scoreBar"); bar.firstChild.style.width = (poss ? Math.min(100, shown / poss * 100) : 0) + "%";
   bar.lastChild.style.left = `calc(${poss ? Math.min(100, tgt / poss * 100) : 0}% - 1px)`;
   document.querySelectorAll("#dayType button").forEach(b => b.setAttribute("aria-checked", String(b.dataset.v === dayType(day))));
   $("#trackBadge").replaceChildren(el("span", { class: "badge " + (isLogged(day) ? "hit" : "miss"), text: isLogged(day) ? "✓ Tracked" : "Not tracked yet" }));
   const hitB = $("#hitBadge"); hitB.replaceChildren();
-  if (day.off) hitB.append(el("span", { class: "badge miss", text: "Rest day" }));
+  if (day.off && !poss) hitB.append(el("span", { class: "badge miss", text: "Rest day" }));
   else if (shown >= tgt) hitB.append(el("span", { class: "badge hit", text: "★ Target hit" }));
   else hitB.append(el("span", { class: "badge miss", text: `${Math.max(0, tgt - shown)} to target` }));
-  $("#scoreMeta").textContent = day.off ? "Day off: skipped in averages, streaks are kept." : `${isPokerDay(day) ? "Poker day · " : ""}Target ${tgt} of ${poss} · ${poss ? Math.round(shown / poss * 100) : 0}% of points`;
+  $("#scoreMeta").textContent = day.off && !poss ? "Day off: skipped in averages, streaks are kept." : `${day.off ? "Day off · " : isPokerDay(day) ? "Poker day · " : ""}Target ${tgt} of ${poss} · ${poss ? Math.round(shown / poss * 100) : 0}% of points`;
   document.querySelectorAll("#habitList .habit").forEach(row => {
     const h = habits().find(x => x.id === row.dataset.id); if (!h) return;
     const v = day.h ? day.h[h.id] : undefined;
     const done = isDone(h, day);
-    row.classList.toggle("done", done && !day.off);
+    row.classList.toggle("done", done);
     row.classList.toggle("slip", h.type === "Avoid" && !!v);
-    row.classList.toggle("off", !!day.off);
     if (row.getAttribute("role") === "button") row.setAttribute("aria-pressed", String(!!v));
   });
   const pk = pokerOf(day), r = day.r || {};
@@ -675,7 +687,7 @@ function renderStats() {
         el("span", {}, "Strength ", el("b", { text: pct(x.strength) })),
         el("span", {}, "30 days ", el("b", { text: pct(x.n30 ? x.d30 / x.n30 : null) })),
         el("span", {}, "All-time ", el("b", { text: pct(x.days ? x.done / x.days : null) })),
-        x.h.on && x.h.on !== "both" ? el("span", { text: ON_LABEL[x.h.on] + " only" }) : null,
+        daysLabel(x.h) ? el("span", { text: daysLabel(x.h) }) : null,
         el("span", {}, "Streak ", el("b", { text: `${x.streak}` }), ` · best ${x.best}`),
         x.h.type === "Minutes" ? el("span", {}, el("b", { text: n1(x.mins / 60) }), " hrs total") : null)));
   });
@@ -801,27 +813,32 @@ function renderSetup() {
     inp.addEventListener("input", () => { c[key] = type === "number" ? num(inp.value) : inp.value; });
     return el("div", { class: "field" }, el("label", { for: id, text: label }), inp);
   };
-  root.push(el("section", { class: "card" }, el("h3", { class: "sub", text: "Targets" }),
-    el("div", { class: "grid2" }, f("Tracking since", "start", "date"), f("Non-poker day target", "target", "number", "1"), f("Poker day target", "pokerTarget", "number", "1"), f("Calorie target", "calories", "number", "50"),
+  root.push(el("section", { class: "card" }, el("h3", { class: "sub", text: "General" }),
+    el("div", { class: "grid2" }, f("Tracking since", "start", "date"), f("Calorie target", "calories", "number", "50"),
       f("Sleep goal (hours)", "sleepGoal", "number", "0.25"), f("Goal weight", "goalWeight", "number", "0.1"), f("Poker profit goal $", "profitGoal", "number", "100"))));
 
-  const list = el("div", { style: "display:grid;gap:10px" });
-  const total = el("p", { class: "calc" });
-  const drawTotal = () => {
-    const sum = side => c.habits.filter(h => h.name && ((h.on || "both") === "both" || h.on === side)).reduce((a, h) => a + (+h.pts || 0), 0);
-    total.innerHTML = `Points possible: Non-poker days <b>${sum("np")}</b> · Poker days <b>${sum("poker")}</b>`;
-  };
-  const drawList = () => {
-    list.replaceChildren();
-    c.habits.forEach((h, i) => {
-      const id = "h" + i;
+  // Habits keep a days map; convert older "on" values once so every tab edits the same objects.
+  c.habits.forEach(h => { h.days = habitDays(h); delete h.on; });
+  const TYPES = ["np", "poker", "off"];
+  if (!TYPES.includes(S.setupTab)) S.setupTab = "np";
+  const tabs = el("div", { class: "seg light", role: "tablist", "aria-label": "Day type" });
+  const pane = el("div", { style: "display:grid;gap:14px" });
+  const drawTabs = () => tabs.replaceChildren(...TYPES.map(t => el("button", { type: "button", role: "tab", "data-v": t, "aria-selected": String(S.setupTab === t), "aria-checked": String(S.setupTab === t), text: DAY_LABEL[t],
+    onclick: () => { S.setupTab = t; drawTabs(); drawPane(); } })));
+  const drawPane = () => {
+    const t = S.setupTab, mine = c.habits.filter(h => h.days[t]), others = c.habits.filter(h => !h.days[t]);
+    const tk = TARGET_KEY[t];
+    const total = el("p", { class: "calc" });
+    const drawTotal = () => { const sum = c.habits.filter(h => h.days[t] && (h.name || "").trim()).reduce((a, h) => a + (+h.pts || 0), 0); total.innerHTML = `Points possible on ${dayNoun(t)}: <b>${sum}</b>`; };
+    const list = el("div", { style: "display:grid;gap:10px" });
+    mine.forEach((h, n) => {
+      const id = "h-" + h.id;
       const inp = (label, key, attrs = {}) => { const x = el("input", { id: `${id}-${key}`, value: h[key] == null ? "" : h[key], ...attrs });
         x.addEventListener("input", () => { h[key] = attrs.type === "number" ? num(x.value) : x.value; drawTotal(); });
         return el("div", { class: "field" }, el("label", { for: `${id}-${key}`, text: label }), x); };
-      const sel = el("select", { id: `${id}-type` }, ...["Check", "Minutes", "Avoid"].map(t => el("option", { value: t, selected: h.type === t, text: t })));
-      sel.addEventListener("change", () => { h.type = sel.value; drawList(); });
-      const onSel = el("select", { id: `${id}-on` }, ...["both", "np", "poker"].map(v => el("option", { value: v, selected: (h.on || "both") === v, text: ON_LABEL[v] })));
-      onSel.addEventListener("change", () => { h.on = onSel.value; drawTotal(); });
+      const sel = el("select", { id: `${id}-type` }, ...["Check", "Minutes", "Avoid"].map(v => el("option", { value: v, selected: h.type === v, text: v })));
+      sel.addEventListener("change", () => { h.type = sel.value; drawPane(); });
+      const swap = dir => { const a = c.habits.indexOf(h), b = c.habits.indexOf(mine[n + dir]); [c.habits[a], c.habits[b]] = [c.habits[b], c.habits[a]]; drawPane(); };
       list.append(el("div", { class: "hedit" },
         inp("Habit", "name"),
         el("div", { class: "grid3" }, inp("Category", "cat"), inp("Points", "pts", { type: "number", step: "1", inputmode: "numeric" }),
@@ -829,20 +846,35 @@ function renderSetup() {
         el("div", { class: "grid2" },
           h.type === "Minutes" ? inp("Min. minutes", "min", { type: "number", step: "1", inputmode: "numeric" }) : el("p", { class: "note", text: h.type === "Avoid" ? "Counts as done unless you mark a slip." : "Done when you tap it." }),
           inp("Times / week", "tpw", { type: "number", step: "1", min: "1", max: "7", inputmode: "numeric" })),
-        el("div", { class: "field" }, el("label", { for: `${id}-on`, text: "Counts on" }), onSel),
+        el("div", { class: "field" }, el("span", { class: "lbl", text: "Counts on" }),
+          el("div", { class: "daychips" }, ...TYPES.map(k => el("button", { type: "button", "aria-pressed": String(!!h.days[k]), disabled: k === t, text: DAY_LABEL[k],
+            onclick: () => { h.days[k] = !h.days[k]; drawPane(); } })))),
         el("div", { class: "row" },
-          el("button", { type: "button", disabled: i === 0, onclick: () => { [c.habits[i - 1], c.habits[i]] = [c.habits[i], c.habits[i - 1]]; drawList(); }, text: "Move up" }),
-          el("button", { type: "button", disabled: i === c.habits.length - 1, onclick: () => { [c.habits[i + 1], c.habits[i]] = [c.habits[i], c.habits[i + 1]]; drawList(); }, text: "Move down" }),
+          el("button", { type: "button", disabled: n === 0, onclick: () => swap(-1), text: "Move up" }),
+          el("button", { type: "button", disabled: n === mine.length - 1, onclick: () => swap(1), text: "Move down" }),
           el("span", { class: "spacer" }),
-          el("button", { type: "button", style: "color:var(--coral)", onclick: () => { c.habits.splice(i, 1); drawList(); }, text: "Remove" }))));
+          el("button", { type: "button", onclick: () => { h.days[t] = false; drawPane(); }, text: "Remove from this day" }),
+          el("button", { type: "button", style: "color:var(--coral)", onclick: () => { if (confirm(`Delete "${h.name || "this habit"}" from every day type? Past days keep their record.`)) { c.habits.splice(c.habits.indexOf(h), 1); drawPane(); } }, text: "Delete" }))));
     });
+    if (!mine.length) list.append(el("p", { class: "note", text: t === "off" ? "No habits count on days off, so they're rest days. Add one below if you want to track something on days off." : `No habits count on ${dayNoun(t)} yet.` }));
     drawTotal();
+    const card = el("section", { class: "card" },
+      el("h3", { class: "sub", text: t === "off" ? "Days off" : dayNoun(t) }),
+      el("div", { class: "grid2" }, f(t === "off" ? "Day off target" : `${DAY_LABEL[t]} day target`, tk, "number", "1")),
+      el("p", { class: "note", text: "Check: tap when done. Minutes: done at the minimum. Avoid: a habit to quit; mark only slips." }),
+      list, total,
+      el("button", { type: "button", class: "btn ghost", onclick: () => { c.habits.push({ id: "h" + Date.now().toString(36), name: "", cat: "", pts: 1, type: "Check", min: null, tpw: 7, days: { np: false, poker: false, off: false, [t]: true } }); drawPane(); const ins = pane.querySelectorAll(".hedit"); if (ins.length) ins[ins.length - 1].querySelector("input").focus(); }, text: `+ New habit for ${dayNoun(t)}` }));
+    const rest = others.filter(h => (h.name || "").trim());
+    const other = rest.length ? el("section", { class: "card" },
+      el("h3", { class: "sub", text: `Not on ${dayNoun(t)}` }),
+      el("p", { class: "note", text: "Your other habits. Add one to count it on this day type too." }),
+      ...rest.map(h => el("div", { class: "row", style: "border-top:1px solid var(--line);padding-top:8px" },
+        el("span", { style: "font-weight:700;flex:1;min-width:0", text: h.name }), el("span", { class: "note", text: `${+h.pts || 0} pt${+h.pts === 1 ? "" : "s"}` }),
+        el("button", { type: "button", class: "btn ghost", style: "padding:6px 12px", onclick: () => { h.days[t] = true; drawPane(); }, text: "+ Add" })))) : null;
+    pane.replaceChildren(card, ...(other ? [other] : []));
   };
-  drawList();
-  root.push(el("section", { class: "card" }, el("h3", { class: "sub", text: "Habits" }),
-    el("p", { class: "note", text: "Check: tap when done. Minutes: done at the minimum. Avoid: a habit to quit; mark only slips. Removing a habit keeps its past days." }),
-    list, total,
-    el("button", { type: "button", class: "btn ghost", onclick: () => { c.habits.push({ id: "h" + Date.now().toString(36), name: "", cat: "", pts: 1, type: "Check", min: null, tpw: 7 }); drawList(); list.lastChild.querySelector("input").focus(); }, text: "+ Add habit" })));
+  drawTabs(); drawPane();
+  root.push(el("div", { style: "display:grid;gap:8px" }, el("h3", { class: "sub", text: "Habits & targets by day type" }), tabs), pane);
 
   root.push(el("div", { class: "row" },
     el("button", { type: "button", class: "btn", id: "saveSetup", onclick: async () => {
