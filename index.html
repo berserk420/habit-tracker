@@ -1,0 +1,902 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#282825"><link rel="manifest" href="manifest.webmanifest"><link rel="icon" type="image/png" href="icon-192.png"><link rel="apple-touch-icon" href="icon-192.png"><style>body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style><script src="shim.js"></script></head><body><title>Habit Tracker</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Manrope:wght@400;500;600;700;800&display=swap">
+<style>
+/* Layout: one-screen phone app. Sticky ink header, scrolling paper body, fixed tab bar. Teal "panel" for the day's score, like Ellipsus's app chrome. */
+:root {
+  --paper: #F2F2EF; --card: #FBFBF9; --ink: #282825; --muted: #76766E; --line: #E2E2DD;
+  --panel: #1F4A4F; --panel-ink: #EEF4F3; --panel-muted: #A9C2C0;
+  --lav: #2173BE; --lav-soft: #E3EEF8; --green: #3B8556; --green-soft: #E1EFE5;
+  --coral: #D2443E; --coral-soft: #F9DEDC; --orange: #E0822F; --orange-soft: #FBEBDC;
+  --head: #282825; --head-ink: #FBFBF9;
+  --serif: "Instrument Serif", "Iowan Old Style", Georgia, serif;
+  --sans: "Manrope", "Segoe UI", system-ui, sans-serif;
+  --r-lg: 20px; --r-md: 14px; --r-sm: 9px;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --paper: #1B1B19; --card: #252522; --ink: #F1F1EC; --muted: #A2A299; --line: #3A3A35;
+  --panel: #1E464B; --panel-ink: #EEF4F3; --panel-muted: #9DBDBA;
+  --lav: #6FAEE8; --lav-soft: #1F3247; --green: #7CC795; --green-soft: #213729;
+  --coral: #F2817B; --coral-soft: #452729; --orange: #F2A766; --orange-soft: #43311F;
+  --head: #111110; --head-ink: #F1F1EC; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --paper: #1B1B19; --card: #252522; --ink: #F1F1EC; --muted: #A2A299; --line: #3A3A35;
+  --panel: #1E464B; --panel-ink: #EEF4F3; --panel-muted: #9DBDBA;
+  --lav: #6FAEE8; --lav-soft: #1F3247; --green: #7CC795; --green-soft: #213729;
+  --coral: #F2817B; --coral-soft: #452729; --orange: #F2A766; --orange-soft: #43311F;
+  --head: #111110; --head-ink: #F1F1EC; color-scheme: dark }
+
+html, body { height: 100%; }
+body { background: var(--paper); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.45; -webkit-font-smoothing: antialiased; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--head); }
+* { box-sizing: border-box; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--lav); outline-offset: 2px; }
+.num { font-variant-numeric: tabular-nums; }
+
+header.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--head); color: var(--head-ink);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 10px 12px; }
+.brand { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.brand h1 { margin: 0; font-family: var(--serif); font-weight: 400; font-size: 26px; letter-spacing: .2px; }
+.brand h1 i { color: var(--lav); font-style: italic; }
+.brand .sync { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; opacity: .7; }
+.datebar { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.datebar .label { flex: 1; min-width: 0; text-align: center; font-weight: 700; }
+.datebar .label small { display: block; font-weight: 500; font-size: 12px; opacity: .7; }
+.iconbtn { width: 38px; height: 38px; border-radius: 50%; border: 1px solid color-mix(in srgb, var(--head-ink) 25%, transparent); background: transparent; display: grid; place-items: center; }
+.pill { border: 1px solid color-mix(in srgb, var(--head-ink) 25%, transparent); background: transparent; border-radius: 999px; padding: 6px 12px; font-size: 13px; font-weight: 600; }
+.datepick { position: relative; }
+.datepick input { position: absolute; inset: 0; opacity: 0; width: 100%; }
+
+main { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 14px calc(96px + env(safe-area-inset-bottom, 0px)); max-width: 720px; margin: 0 auto; display: grid; gap: 14px; }
+
+nav.tabs { position: fixed; left: 0; right: 0; bottom: 0; z-index: 6; background: var(--card); border-top: 1px solid var(--line);
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  padding-left: max(8px, env(safe-area-inset-left, 0px)); padding-right: max(8px, env(safe-area-inset-right, 0px)); padding-bottom: env(safe-area-inset-bottom, 0px); }
+nav.tabs a { display: grid; justify-items: center; gap: 2px; padding: 9px 0 10px; color: var(--muted); text-decoration: none; font-size: 12px; font-weight: 700; }
+nav.tabs a svg { width: 22px; height: 22px; }
+nav.tabs a[aria-current="page"] { color: var(--ink); }
+nav.tabs a[aria-current="page"] svg { color: var(--lav); }
+
+.card { background: var(--card); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 16px; display: grid; gap: 12px; min-width: 0; }
+.eyebrow { font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 0; }
+h2.title { margin: 0; font-family: var(--serif); font-weight: 400; font-size: 28px; line-height: 1.05; text-wrap: balance; }
+h3.sub { margin: 0; font-size: 15px; font-weight: 800; }
+.vhead { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; }
+.vhead > div:first-child { flex: 1; min-width: 0; }
+.yrsw { display: inline-flex; align-items: center; gap: 4px; background: var(--card); border: 1px solid var(--line); border-radius: 999px; padding: 3px; }
+.yrsw button { width: 34px; height: 34px; border-radius: 50%; border: 0; background: transparent; color: var(--ink); font-size: 18px; line-height: 1; }
+.yrsw button:disabled { opacity: .3; }
+.yrsw b { min-width: 46px; text-align: center; font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+.row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.spacer { flex: 1; }
+
+/* score panel */
+.panel { background: var(--panel); color: var(--panel-ink); border-radius: var(--r-lg); padding: 18px; display: grid; gap: 12px; }
+.panel .big { font-family: var(--serif); font-size: 56px; line-height: .9; }
+.panel .big small { font-size: 26px; color: var(--panel-muted); }
+.panel .meta { color: var(--panel-muted); font-size: 13px; font-weight: 600; }
+.bar { position: relative; height: 10px; border-radius: 99px; background: color-mix(in srgb, var(--panel-ink) 18%, transparent); overflow: visible; }
+.bar > span { position: absolute; inset: 0 auto 0 0; border-radius: 99px; background: var(--panel-ink); transition: width .25s; }
+.bar > i { position: absolute; top: -5px; bottom: -5px; width: 2px; background: var(--orange); border-radius: 2px; }
+.badge { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 4px 10px; font-size: 12px; font-weight: 800; }
+.badge.hit { background: var(--orange); color: #282825; }
+.badge.miss { background: color-mix(in srgb, var(--panel-ink) 16%, transparent); color: var(--panel-ink); }
+.switch { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; font-size: 13px; }
+.switch input { appearance: none; width: 42px; height: 24px; border-radius: 99px; background: color-mix(in srgb, var(--panel-ink) 22%, transparent); position: relative; margin: 0; transition: background .2s; }
+.switch input::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: var(--panel-ink); transition: transform .2s; }
+.switch input:checked { background: var(--orange); }
+.switch input:checked::after { transform: translateX(18px); }
+
+/* habits */
+.habits { display: grid; gap: 8px; }
+.habit { display: grid; grid-template-columns: 30px 1fr auto; align-items: center; gap: 12px; padding: 12px 14px; border-radius: var(--r-md); border: 1px solid var(--line); background: var(--card); text-align: left; width: 100%; min-height: 58px; }
+.habit .tick { width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--line); display: grid; place-items: center; transition: all .15s; }
+.habit .tick svg { width: 16px; height: 16px; opacity: 0; }
+.habit .name { font-weight: 700; min-width: 0; }
+.habit .name small { display: block; font-weight: 500; color: var(--muted); font-size: 12px; }
+.habit .pts { font-size: 12px; font-weight: 800; color: var(--muted); }
+.habit.done { background: var(--green-soft); border-color: transparent; }
+.habit.done .tick { background: var(--green); border-color: var(--green); color: var(--card); }
+.habit.done .tick svg { opacity: 1; }
+.habit.slip { background: var(--coral-soft); border-color: transparent; }
+.habit.slip .tick { background: var(--coral); border-color: var(--coral); color: var(--card); }
+.habit.slip .tick svg { opacity: 1; }
+.habit.off { opacity: .45; }
+.stepper { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 999px; background: var(--card); }
+.stepper button { width: 34px; height: 34px; border: 0; background: transparent; font-size: 18px; font-weight: 700; }
+.stepper input { width: 40px; border: 0; background: transparent; text-align: center; font-weight: 800; padding: 0; }
+.stepper input::-webkit-outer-spin-button, .stepper input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+
+/* sections */
+details.sec { background: var(--card); border: 1px solid var(--line); border-radius: var(--r-lg); }
+details.sec > summary { list-style: none; display: flex; align-items: center; gap: 10px; padding: 14px 16px; cursor: pointer; }
+details.sec > summary::-webkit-details-marker { display: none; }
+details.sec > summary .t { font-weight: 800; }
+details.sec > summary .s { margin-left: auto; color: var(--muted); font-size: 13px; font-weight: 600; text-align: right; }
+details.sec > summary .chev { transition: transform .2s; color: var(--muted); }
+details.sec[open] > summary .chev { transform: rotate(90deg); }
+details.sec .body { padding: 0 16px 16px; display: grid; gap: 12px; }
+.grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.field { display: grid; gap: 4px; min-width: 0; }
+.field label, .lbl { font-size: 12px; font-weight: 700; color: var(--muted); }
+.field input, .field select, textarea { width: 100%; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--paper); padding: 9px 10px; min-width: 0; }
+textarea { min-height: 96px; resize: vertical; }
+.calc { font-size: 13px; color: var(--muted); font-weight: 600; }
+.calc b { color: var(--ink); }
+.subhead { font-size: 12px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--lav); margin: 4px 0 -4px; }
+.chips { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 4px; }
+.chips button { height: 34px; border-radius: 8px; border: 1px solid var(--line); background: var(--paper); font-weight: 800; font-size: 13px; padding: 0; }
+.chips button[aria-pressed="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.rating { display: grid; gap: 6px; }
+.rating .row { justify-content: space-between; }
+
+/* stats */
+.kpis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.kpi { background: var(--card); border: 1px solid var(--line); border-radius: var(--r-md); padding: 12px 14px; display: grid; gap: 2px; }
+.kpi .v { font-family: var(--serif); font-size: 34px; line-height: 1; }
+.kpi .k { font-size: 12px; font-weight: 700; color: var(--muted); }
+.kpi.accent { background: var(--panel); border-color: var(--panel); color: var(--panel-ink); }
+.kpi.accent .k { color: var(--panel-muted); }
+.hrow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; padding: 12px 0; border-top: 1px solid var(--line); }
+.hrow:first-of-type { border-top: 0; }
+.hrow .nm { font-weight: 700; min-width: 0; }
+.hrow .wk { font-size: 12px; font-weight: 800; border-radius: 999px; padding: 3px 9px; background: var(--paper); align-self: start; }
+.hrow .wk.met { background: var(--green-soft); color: var(--green); }
+.hrow .facts { grid-column: 1 / -1; display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); font-weight: 600; }
+.hrow .facts b { color: var(--ink); }
+.meter { grid-column: 1 / -1; height: 6px; border-radius: 99px; background: var(--paper); overflow: hidden; }
+.meter span { display: block; height: 100%; background: var(--lav); border-radius: 99px; }
+table.t { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.t th { text-align: right; font-size: 11px; font-weight: 800; color: var(--muted); letter-spacing: .04em; text-transform: uppercase; padding: 6px 6px; }
+table.t th:first-child, table.t td:first-child { text-align: left; }
+table.t td { text-align: right; padding: 8px 6px; border-top: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+table.t tr.total td { font-weight: 800; }
+.scroll-x { overflow-x: auto; }
+.pos { color: var(--green); } .neg { color: var(--coral); }
+.better { background: var(--green-soft); border-radius: 6px; }
+.pay { display: grid; gap: 6px; padding: 12px 0; border-top: 1px solid var(--line); }
+.pay .nm { font-weight: 700; min-width: 0; }
+.pay .facts { display: flex; gap: 12px; flex-wrap: wrap; font-size: 12px; color: var(--muted); font-weight: 600; }
+.pay .facts b { color: var(--ink); }
+.pay .facts b.pos { color: var(--green); } .pay .facts b.neg { color: var(--coral); }
+.div-bar { position: relative; height: 8px; border-radius: 99px; background: var(--paper); }
+.div-bar i { position: absolute; left: 50%; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; background: var(--muted); border-radius: 2px; }
+.div-bar span { position: absolute; top: 0; bottom: 0; border-radius: 99px; }
+.div-bar span.up { background: var(--green); }
+.div-bar span.down { background: var(--coral); }
+svg.chart { width: 100%; height: auto; display: block; }
+svg.chart text { fill: var(--muted); font-size: 10px; font-family: var(--sans); }
+
+/* year */
+.months { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(132px, 100%), 1fr)); gap: 14px 12px; }
+.month h4 { margin: 0 0 6px; font-family: var(--serif); font-weight: 400; font-size: 20px; }
+.month .avg { font-family: var(--sans); font-size: 12px; color: var(--muted); font-weight: 700; margin-left: 6px; }
+.cal { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 3px; }
+.cal .dow { font-size: 9px; text-align: center; color: var(--muted); font-weight: 800; }
+.cal button { aspect-ratio: 1; max-width: 100%; border: 0; border-radius: 5px; background: var(--paper); padding: 0; font-size: 9px; font-weight: 700; color: var(--muted); }
+.cal button.today { outline: 2px solid var(--ink); outline-offset: -2px; }
+.cal button.offd { background: repeating-linear-gradient(45deg, var(--line) 0 3px, transparent 3px 6px); }
+.legend { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); font-weight: 600; flex-wrap: wrap; }
+.legend span.sw { width: 14px; height: 14px; border-radius: 4px; display: inline-block; }
+
+/* setup */
+.hedit { border: 1px solid var(--line); border-radius: var(--r-md); padding: 12px; display: grid; gap: 10px; background: var(--paper); }
+.hedit .row button { border: 1px solid var(--line); background: var(--card); border-radius: 8px; padding: 6px 10px; font-size: 13px; font-weight: 700; }
+.btn { border: 0; border-radius: 999px; padding: 12px 18px; font-weight: 800; background: var(--ink); color: var(--paper); }
+.btn.ghost { background: transparent; color: var(--ink); border: 1px solid var(--line); }
+.btn.lav { background: var(--lav); color: var(--paper); }
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(84px + env(safe-area-inset-bottom, 0px)); background: var(--ink); color: var(--paper); padding: 10px 16px; border-radius: 999px; font-size: 13px; font-weight: 700; z-index: 20; max-width: calc(100% - 32px); }
+.empty { text-align: center; padding: 28px 16px; display: grid; gap: 10px; justify-items: center; }
+.empty .title { font-size: 30px; }
+.note { font-size: 13px; color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+@media (min-width: 640px) { .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+</style>
+
+<header class="top">
+  <div class="brand"><h1>Habit <i>Tracker</i></h1><span class="sync" id="sync">Connecting…</span></div>
+  <div class="datebar" id="datebar">
+    <button class="iconbtn" id="prevDay" aria-label="Previous day"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M15 5l-7 7 7 7"/></svg></button>
+    <label class="label datepick" for="datePick"><span id="dateLabel">Today</span><small id="dateSub"> </small><input type="date" id="datePick" aria-label="Pick a date"></label>
+    <button class="iconbtn" id="nextDay" aria-label="Next day"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M9 5l7 7-7 7"/></svg></button>
+    <button class="pill" id="goToday">Today</button>
+  </div>
+</header>
+
+<main id="view"><div class="card empty"><h2 class="title">Loading your tracker</h2><p class="note">Your habits, points and poker log appear here once they load.</p></div></main>
+
+<nav class="tabs" aria-label="Sections">
+  <a href="#today" data-v="today"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.5 2.5L16 9.5"/></svg>Today</a>
+  <a href="#stats" data-v="stats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 20V11M12 20V5M19 20v-7"/></svg>Stats</a>
+  <a href="#year" data-v="year"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="4" width="6" height="6" rx="1.5"/><rect x="14" y="4" width="6" height="6" rx="1.5"/><rect x="4" y="14" width="6" height="6" rx="1.5"/><rect x="14" y="14" width="6" height="6" rx="1.5"/></svg>Year</a>
+  <a href="#setup" data-v="setup"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>Setup</a>
+</nav>
+
+<script>
+(() => {
+"use strict";
+const $ = (s, r = document) => r.querySelector(s);
+const el = (tag, attrs = {}, ...kids) => {
+  const n = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (v == null || v === false) continue;
+    if (k === "class") n.className = v;
+    else if (k === "text") n.textContent = v;
+    else if (k === "html") n.innerHTML = v;
+    else if (k.startsWith("on")) n.addEventListener(k.slice(2), v);
+    else n.setAttribute(k, v === true ? "" : v);
+  }
+  for (const c of kids.flat()) if (c != null && c !== false) n.append(c.nodeType ? c : document.createTextNode(String(c)));
+  return n;
+};
+const CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+const CROSS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+const CHEV = '<svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M9 5l7 7-7 7"/></svg>';
+
+/* ---------- dates ---------- */
+const pad = n => String(n).padStart(2, "0");
+const keyOf = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const parseKey = k => { const [y, m, d] = k.split("-").map(Number); return new Date(y, m - 1, d, 12); };
+const addDays = (k, n) => { const d = parseKey(k); d.setDate(d.getDate() + n); return keyOf(d); };
+const diffDays = (a, b) => Math.round((parseKey(b) - parseKey(a)) / 86400000);
+const todayKey = () => keyOf(new Date());
+const fmtLong = k => parseKey(k).toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" });
+const fmtShort = k => parseKey(k).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+
+/* ---------- number formatting ---------- */
+const n0 = v => v == null || !isFinite(v) ? "–" : Math.round(v).toLocaleString();
+const n1 = v => v == null || !isFinite(v) ? "–" : (Math.round(v * 10) / 10).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const pct = v => v == null || !isFinite(v) ? "–" : Math.round(v * 100) + "%";
+const money = v => v == null || !isFinite(v) ? "–" : (v < 0 ? "−$" : "$") + Math.abs(Math.round(v)).toLocaleString();
+const num = v => (v === "" || v == null || isNaN(+v)) ? null : +v;
+
+/* ---------- state ---------- */
+const S = { db: null, cfg: null, days: new Map(), date: todayKey(), view: "today", loaded: { cfg: false, days: false }, dirty: new Set(), writing: new Map(), timers: new Map(), downloads: null, readOnly: false };
+
+const DEFAULT_TARGETS = { start: "2027-01-01", target: 13, calories: 2000, sleepGoal: 7.5, goalWeight: null, profitGoal: 50000 };
+const cfg = () => S.cfg || { ...DEFAULT_TARGETS, habits: [] };
+const habits = () => (cfg().habits || []).filter(h => h && h.name);
+const possible = () => habits().reduce((a, h) => a + (+h.pts || 0), 0);
+
+/* ---------- day logic (mirrors the Excel workbook) ---------- */
+function hasData(o) {
+  if (o == null) return false;
+  if (typeof o === "boolean") return o;
+  if (typeof o === "number") return true;
+  if (typeof o === "string") return o.trim() !== "";
+  if (typeof o === "object") return Object.values(o).some(hasData);
+  return false;
+}
+const getDay = k => S.days.get(k) || {};
+const isLogged = day => hasData(day);
+function isDone(h, day) {
+  const v = day.h ? day.h[h.id] : undefined;
+  if (h.type === "Minutes") return typeof v === "number" && v >= (+h.min || 0) && v > 0;
+  if (h.type === "Avoid") return isLogged(day) && !day.off && !v;
+  return !!v;
+}
+function dayPoints(day) {
+  if (!isLogged(day) || day.off) return null;
+  return habits().reduce((a, h) => a + (isDone(h, day) ? (+h.pts || 0) : 0), 0);
+}
+const g = (o, a, b) => (o && o[a] && typeof o[a][b] === "number") ? o[a][b] : null;
+function pokerOf(day) {
+  const on = { hands: g(day, "on", "hands"), bb: g(day, "on", "bb"), won: g(day, "on", "won") };
+  const lv = { hrs: g(day, "lv", "hrs"), bb: g(day, "lv", "bb"), won: g(day, "lv", "won") };
+  const mt = { hrs: g(day, "mt", "hrs"), buy: g(day, "mt", "buy"), cash: g(day, "mt", "cash") };
+  const onBB = on.won != null && on.bb > 0 ? on.won / on.bb : null;
+  const lvBB = lv.won != null && lv.bb > 0 ? lv.won / lv.bb : null;
+  const mtNet = (mt.buy != null || mt.cash != null) ? (mt.cash || 0) - (mt.buy || 0) : null;
+  const any = on.won != null || lv.won != null || mtNet != null;
+  return { on, lv, mt, onBB, lvBB, mtNet, net: any ? (on.won || 0) + (lv.won || 0) + (mtNet || 0) : null,
+    bb100: onBB != null && on.hands > 0 ? onBB / on.hands * 100 : null, bbhr: lvBB != null && lv.hrs > 0 ? lvBB / lv.hrs : null };
+}
+function foodOf(day) {
+  const f = day.fd || {}; const vals = ["b", "l", "d", "o"].map(k => typeof f[k] === "number" ? f[k] : null);
+  if (vals.every(v => v == null)) return null;
+  return vals.reduce((a, v) => a + (v || 0), 0);
+}
+
+/* ---------- years ---------- */
+function yearBounds() {
+  const c = cfg(), sy = +(c.start || DEFAULT_TARGETS.start).slice(0, 4), ty = +todayKey().slice(0, 4);
+  let lo = Math.min(sy, ty), hi = Math.max(sy, ty);
+  for (const [k, d] of S.days) if (isLogged(d)) { const y = +k.slice(0, 4); if (y < lo) lo = y; if (y > hi) hi = y; }
+  return [lo, hi];
+}
+function curYear() {
+  const [lo, hi] = yearBounds();
+  if (S.year == null) { const ty = +todayKey().slice(0, 4), sy = +(cfg().start || DEFAULT_TARGETS.start).slice(0, 4); S.year = Math.max(ty, sy); }
+  return Math.min(hi, Math.max(lo, S.year));
+}
+function yearSwitch() {
+  const [lo, hi] = yearBounds(), y = curYear();
+  const go = d => { S.year = y + d; render(); window.scrollTo(0, 0); };
+  return el("div", { class: "yrsw", role: "group", "aria-label": "Year" },
+    el("button", { type: "button", "aria-label": "Previous year", disabled: y <= lo ? "" : null, text: "‹", onclick: () => go(-1) }),
+    el("b", { text: String(y) }),
+    el("button", { type: "button", "aria-label": "Next year", disabled: y >= hi ? "" : null, text: "›", onclick: () => go(1) }));
+}
+
+const DECAY = Math.pow(0.2, 1 / 30);
+function computeStats(Y = curYear()) {
+  const c = cfg(), hs = habits(), cs = c.start || DEFAULT_TARGETS.start, y0 = `${Y}-01-01`, end = `${Y}-12-31`;
+  const start = cs > y0 && cs <= end ? cs : y0;
+  let asof = start;
+  for (const [k, d] of S.days) if (k >= start && k <= end && k > asof && isLogged(d)) asof = k;
+  const N = Math.max(0, diffDays(start, asof)) + 1;
+  const per = hs.map(h => ({ h, done: 0, streak: 0, best: 0, strength: 0, mins: 0, d7: 0, d30: 0, wk: 0,
+    net: { y: [], n: [] }, ov: { y: [], n: [] }, fo: { y: [], n: [] } }));
+  const weekStart = addDays(start, 7 * Math.floor(diffDays(start, asof) / 7));
+  let logged = 0, off = 0, on = 0, hit = 0, tStreak = 0, tBest = 0, on7 = 0, on30 = 0, pts = [], pcts = [], pts7 = [];
+  const series = [];
+  const P = { onN: 0, hands: 0, onWon: 0, onBB: 0, lvN: 0, lvHrs: 0, lvWon: 0, lvBB: 0, mtN: 0, mtHrs: 0, mtBuy: 0, mtNet: 0, days: 0, net: 0 };
+  const ins = { hit: {}, miss: {} };
+  const insKeys = ["overall", "focus", "slp", "net", "study"];
+  for (const k of insKeys) { ins.hit[k] = []; ins.miss[k] = []; }
+  const sleep = { hrs: [], score: [], ready: [], hrv: [], rhr: [] }, ratings = {}, wts = [], cals = [], study = [];
+  for (const r of ["focus", "energy", "disc", "overall", "stress", "mood"]) ratings[r] = [];
+  let cum = 0;
+  const month = {};
+  for (let i = 0; i < N; i++) {
+    const k = addDays(start, i), day = getDay(k), lg = isLogged(day), isOff = lg && !!day.off, isOn = lg && !isOff;
+    const in7 = diffDays(k, asof) < 7, in30 = diffDays(k, asof) < 30, inWk = k >= weekStart;
+    if (lg) logged++; if (isOff) off++; if (isOn) { on++; if (in7) on7++; if (in30) on30++; }
+    const p = isOn ? dayPoints(day) : null, poss = possible();
+    const isHit = p != null && p >= (+c.target || 0);
+    if (p != null) { pts.push(p); pcts.push(poss ? p / poss : 0); if (in7) pts7.push(p); }
+    if (isHit) hit++;
+    tStreak = isHit ? tStreak + 1 : (isOff ? tStreak : 0); tBest = Math.max(tBest, tStreak);
+    const pkDay = pokerOf(day), rDay = day.r || {};
+    per.forEach(x => {
+      const dn = isOn && isDone(x.h, day);
+      if (dn) { x.done++; if (in7) x.d7++; if (in30) x.d30++; }
+      if (isOn) {
+        const b = dn ? "y" : "n";
+        if (pkDay.net != null) x.net[b].push(pkDay.net);
+        if (typeof rDay.overall === "number") x.ov[b].push(rDay.overall);
+        if (typeof rDay.focus === "number") x.fo[b].push(rDay.focus);
+      }
+      if (dn && inWk) x.wk++;
+      x.streak = dn ? x.streak + 1 : (isOff ? x.streak : 0); x.best = Math.max(x.best, x.streak);
+      x.strength = isOff ? x.strength : x.strength * DECAY + (dn ? 1 - DECAY : 0);
+      if (x.h.type === "Minutes" && day.h && typeof day.h[x.h.id] === "number") x.mins += day.h[x.h.id];
+    });
+    const pk = pokerOf(day);
+    if (pk.on.won != null) { P.onN++; P.onWon += pk.on.won; P.hands += pk.on.hands || 0; P.onBB += pk.onBB || 0; }
+    if (pk.lv.won != null) { P.lvN++; P.lvWon += pk.lv.won; P.lvHrs += pk.lv.hrs || 0; P.lvBB += pk.lvBB || 0; }
+    if (pk.mtNet != null) { P.mtN++; P.mtNet += pk.mtNet; P.mtHrs += pk.mt.hrs || 0; P.mtBuy += pk.mt.buy || 0; }
+    if (pk.net != null) { P.days++; P.net += pk.net; }
+    cum += pk.net || 0; series.push({ k, cum, pct: p != null && poss ? p / poss : null, off: isOff, logged: lg });
+    const rv = day.r || {};
+    for (const r in ratings) if (typeof rv[r] === "number") ratings[r].push(rv[r]);
+    for (const s in sleep) { const v = g(day, "sl", s); if (v != null) sleep[s].push(v); }
+    if (typeof day.wt === "number") wts.push(day.wt);
+    const fc = foodOf(day); if (fc != null) cals.push(fc);
+    if (typeof day.study === "number") study.push(day.study);
+    if (isOn) {
+      const bucket = isHit ? ins.hit : ins.miss;
+      const vals = { overall: rv.overall, focus: rv.focus, slp: g(day, "sl", "hrs"), net: pk.net, study: day.study };
+      for (const kk of insKeys) if (typeof vals[kk] === "number") bucket[kk].push(vals[kk]);
+    }
+    const mk = k.slice(0, 7); month[mk] = month[mk] || { pcts: [], net: 0 };
+    if (p != null && poss) month[mk].pcts.push(p / poss); month[mk].net += pk.net || 0;
+  }
+  const avg = a => a.length ? a.reduce((x, y) => x + y, 0) / a.length : null;
+  return { Y, start, asof, N, logged, off, on, hit, tStreak, tBest, on7, on30, weekStart, per, P, series, month,
+    avgPts: avg(pts), avgPct: avg(pcts), avg7: avg(pts7), hitRate: on ? hit / on : null,
+    ins, avg, ratings, sleep, wts, cals, study, sumStudy: study.reduce((a, b) => a + b, 0) };
+}
+
+/* ---------- persistence ---------- */
+function toast(msg) {
+  const t = el("div", { class: "toast", role: "status", text: msg });
+  document.body.append(t); setTimeout(() => t.remove(), 2400);
+}
+function setSync(text) { $("#sync").textContent = text; }
+function scheduleSave(k) {
+  if (!S.db || S.readOnly) return;
+  S.dirty.add(k); setSync("Saving…");
+  clearTimeout(S.timers.get(k));
+  S.timers.set(k, setTimeout(() => flush(k), 650));
+}
+async function flush(k) {
+  if (S.writing.get(k)) { S.timers.set(k, setTimeout(() => flush(k), 300)); return; }
+  S.timers.delete(k);
+  S.writing.set(k, true);
+  const body = JSON.parse(JSON.stringify(getDay(k)));
+  try { await S.db.doc("days/" + k).set(body); setSync("Saved on phone"); }
+  catch (e) {
+    if (e && e.code === "invalid_argument") { S.readOnly = true; setSync("Read-only"); toast("This tracker is read-only for you. Only its owner can log days."); }
+    else if (e && e.code === "quota_exceeded") toast("Storage is full. Delete old days to keep logging.");
+    else { setSync("Offline"); toast("Couldn't save. Check your connection; your change is kept on this screen."); }
+  } finally {
+    S.writing.set(k, false);
+    if (!S.timers.has(k)) S.dirty.delete(k);
+  }
+}
+function mutate(fn) {
+  const k = S.date; const day = JSON.parse(JSON.stringify(getDay(k)));
+  fn(day); S.days.set(k, day); scheduleSave(k); refreshToday();
+}
+
+/* ---------- views ---------- */
+const view = () => $("#view");
+function setView(v) {
+  S.view = ["today", "stats", "year", "setup"].includes(v) ? v : "today";
+  document.querySelectorAll("nav.tabs a").forEach(a => a.setAttribute("aria-current", a.dataset.v === S.view ? "page" : "false"));
+  $("#datebar").hidden = S.view !== "today";
+  render();
+}
+function render() {
+  if (!S.db) { if (S.noDb) renderNoDb(); return; }
+  if (!S.loaded.cfg) return;
+  if (S.view === "today") renderToday();
+  else if (S.view === "stats") renderStats();
+  else if (S.view === "year") renderYear();
+  else renderSetup();
+}
+function renderNoDb() {
+  view().replaceChildren(el("div", { class: "card empty" },
+    el("h2", { class: "title", text: "Sign in to log your days" }),
+    el("p", { class: "note", text: "This tracker saves to your Claude account. Open it on claude.ai while signed in and your habits, points and poker results will load here." })));
+}
+
+/* ----- Today ----- */
+function updateDateBar() {
+  const k = S.date, t = todayKey();
+  $("#dateLabel").textContent = k === t ? "Today" : fmtLong(k);
+  const idx = diffDays(k.slice(0, 4) + "-01-01", k) + 1;
+  $("#dateSub").textContent = (k === t ? fmtLong(k) : (k === addDays(t, -1) ? "Yesterday" : "")) + `  ·  Day ${idx}`;
+  $("#datePick").value = k;
+  $("#goToday").hidden = k === t;
+}
+function numField(label, path, opts = {}) {
+  const id = "f-" + path.join("-");
+  const day = getDay(S.date);
+  let v = day; for (const p of path) v = v && v[p];
+  const inp = el("input", { id, type: "number", inputmode: opts.int ? "numeric" : "decimal", step: opts.step || "any", placeholder: opts.ph || "", value: typeof v === "number" ? v : "" });
+  inp.addEventListener("input", () => mutate(d => {
+    let o = d; for (let i = 0; i < path.length - 1; i++) { o[path[i]] = o[path[i]] || {}; o = o[path[i]]; }
+    const val = num(inp.value); if (val == null) delete o[path[path.length - 1]]; else o[path[path.length - 1]] = val;
+  }));
+  return el("div", { class: "field" }, el("label", { for: id, text: label }), inp);
+}
+function section(id, title, summaryId, ...body) {
+  const d = el("details", { class: "sec", id: "sec-" + id });
+  try { if (localStorage.getItem("open-" + id) === "1") d.open = true; } catch (e) {}
+  d.addEventListener("toggle", () => { try { localStorage.setItem("open-" + id, d.open ? "1" : "0"); } catch (e) {} });
+  d.append(el("summary", {}, el("span", { class: "t", text: title }), el("span", { class: "s", id: summaryId }), el("span", { html: CHEV })), el("div", { class: "body" }, ...body));
+  return d;
+}
+function ratingRow(label, key) {
+  const day = getDay(S.date), cur = day.r ? day.r[key] : null;
+  const chips = el("div", { class: "chips", role: "group", "aria-label": label });
+  for (let i = 1; i <= 10; i++) chips.append(el("button", { type: "button", "aria-pressed": String(cur === i), text: i, onclick: () => {
+    mutate(d => { d.r = d.r || {}; if (d.r[key] === i) delete d.r[key]; else d.r[key] = i; });
+    chips.querySelectorAll("button").forEach((b, j) => b.setAttribute("aria-pressed", String((getDay(S.date).r || {})[key] === j + 1)));
+  } }));
+  return el("div", { class: "rating" }, el("div", { class: "row" }, el("span", { class: "lbl", text: label })), chips);
+}
+function renderToday() {
+  updateDateBar();
+  const hs = habits(), day = getDay(S.date);
+  const root = [];
+  if (!hs.length) {
+    root.push(el("div", { class: "card empty" }, el("h2", { class: "title", text: "Add your first habit" }),
+      el("p", { class: "note", text: "Set up the habits you want to score each day, their points and your daily target." }),
+      el("a", { class: "btn", href: "#setup", text: "Open Setup" })));
+    view().replaceChildren(...root); return;
+  }
+  const panel = el("section", { class: "panel", "aria-label": "Today's score" },
+    el("div", { class: "row" }, el("p", { class: "eyebrow", style: "color:var(--panel-muted)", text: "Points" }), el("span", { id: "trackBadge" }), el("span", { class: "spacer" }),
+      el("label", { class: "switch" }, el("input", { type: "checkbox", id: "dayOff", checked: !!day.off, onchange: e => mutate(d => { if (e.target.checked) d.off = true; else delete d.off; }) }), "Day off")),
+    el("div", { class: "row" }, el("div", { class: "big num", id: "scoreBig" }), el("span", { class: "spacer" }), el("span", { id: "hitBadge" })),
+    el("div", { class: "bar", id: "scoreBar" }, el("span"), el("i")),
+    el("div", { class: "meta", id: "scoreMeta" }));
+  root.push(panel);
+
+  const list = el("div", { class: "habits", id: "habitList" });
+  hs.forEach(h => {
+    const row = el("div", { class: "habit", "data-id": h.id });
+    const tick = el("span", { class: "tick", html: h.type === "Avoid" ? CROSS : CHECK });
+    const name = el("span", { class: "name" }, h.name, el("small", { text: h.type === "Minutes" ? `${h.cat || ""}${h.cat ? " · " : ""}goal ${h.min || 0} min` : h.type === "Avoid" ? "Tap only if you slipped" : (h.cat || "") }));
+    const pts = el("span", { class: "pts", text: `${h.pts} pt${+h.pts === 1 ? "" : "s"}` });
+    if (h.type === "Minutes") {
+      const cur = day.h && typeof day.h[h.id] === "number" ? day.h[h.id] : "";
+      const inp = el("input", { type: "number", inputmode: "numeric", min: "0", value: cur, "aria-label": h.name + " minutes", id: "m-" + h.id });
+      const setM = v => mutate(d => { d.h = d.h || {}; if (v == null || v <= 0) delete d.h[h.id]; else d.h[h.id] = v; });
+      inp.addEventListener("input", () => setM(num(inp.value)));
+      const step = dlt => { const v = Math.max(0, (num(inp.value) || 0) + dlt); inp.value = v || ""; setM(v); };
+      const stepper = el("span", { class: "stepper" }, el("button", { type: "button", "aria-label": "5 minutes less", text: "−", onclick: () => step(-5) }), inp, el("button", { type: "button", "aria-label": "5 minutes more", text: "+", onclick: () => step(5) }));
+      row.append(tick, name, stepper);
+      row.style.gridTemplateColumns = "30px 1fr auto";
+      row.addEventListener("click", e => { if (e.target === row || e.target.closest(".name") || e.target.closest(".tick")) { const v = (num(inp.value) || 0) >= (+h.min || 0) && num(inp.value) ? 0 : (+h.min || 5); inp.value = v || ""; setM(v); } });
+    } else {
+      row.setAttribute("role", "button"); row.setAttribute("tabindex", "0");
+      row.setAttribute("aria-pressed", "false");
+      const toggle = () => mutate(d => { d.h = d.h || {}; if (d.h[h.id]) delete d.h[h.id]; else d.h[h.id] = true; });
+      row.addEventListener("click", toggle);
+      row.addEventListener("keydown", e => { if (e.key === " " || e.key === "Enter") { e.preventDefault(); toggle(); } });
+      row.append(tick, name, pts);
+    }
+    list.append(row);
+  });
+  root.push(list);
+
+  root.push(section("grade", "Grade performance", "sumGrade",
+    ratingRow("Focus", "focus"), ratingRow("Energy", "energy"), ratingRow("Discipline", "disc"), ratingRow("Overall", "overall"),
+    ratingRow("Stress", "stress"), ratingRow("Mood", "mood"),
+    el("div", { class: "grid2" }, numField("Study hours", ["study"], { step: "0.25", ph: "0" }))));
+
+  root.push(section("poker", "Poker", "sumPoker",
+    el("p", { class: "subhead", text: "Online cash" }),
+    el("div", { class: "grid3" }, numField("Hands", ["on", "hands"], { int: true }), numField("Big blind $", ["on", "bb"], { ph: "2" }), numField("$ won / lost", ["on", "won"], { ph: "−120" })),
+    el("div", { class: "calc", id: "calcOnline" }),
+    el("p", { class: "subhead", text: "Live cash" }),
+    el("div", { class: "grid3" }, numField("Hours", ["lv", "hrs"], { step: "0.25" }), numField("Big blind $", ["lv", "bb"], { ph: "5" }), numField("$ won / lost", ["lv", "won"])),
+    el("div", { class: "calc", id: "calcLive" }),
+    el("p", { class: "subhead", text: "Tournaments" }),
+    el("div", { class: "grid3" }, numField("Hours", ["mt", "hrs"], { step: "0.25" }), numField("Buy-ins $", ["mt", "buy"]), numField("Cashes $", ["mt", "cash"])),
+    el("div", { class: "calc", id: "calcMtt" })));
+
+  root.push(section("sleep", "Sleep & recovery", "sumSleep",
+    el("div", { class: "grid3" }, numField("Hours slept", ["sl", "hrs"], { step: "0.1" }), numField("Sleep score", ["sl", "score"], { int: true }), numField("Readiness", ["sl", "ready"], { int: true }),
+      numField("HRV", ["sl", "hrv"], { int: true }), numField("Resting HR", ["sl", "rhr"], { int: true }))));
+
+  root.push(section("food", "Body & food", "sumFood",
+    el("div", { class: "grid2" }, numField("Weight", ["wt"], { step: "0.1" })),
+    el("div", { class: "grid2" }, numField("Breakfast cal", ["fd", "b"], { int: true }), numField("Lunch cal", ["fd", "l"], { int: true }), numField("Dinner cal", ["fd", "d"], { int: true }), numField("Other cal", ["fd", "o"], { int: true })),
+    el("div", { class: "calc", id: "calcFood" })));
+
+  const ta = el("textarea", { id: "note", placeholder: "How did today go? What will you adjust?" }); ta.value = day.note || "";
+  ta.addEventListener("input", () => mutate(d => { if (ta.value.trim()) d.note = ta.value; else delete d.note; }));
+  root.push(section("notes", "Notes", "sumNotes", ta));
+
+  view().replaceChildren(...root);
+  refreshToday();
+}
+function refreshToday() {
+  if (S.view !== "today" || !$("#habitList")) return;
+  const c = cfg(), day = getDay(S.date), poss = possible(), p = dayPoints(day);
+  const pts = habits().reduce((a, h) => a + (isDone(h, day) && !day.off ? (+h.pts || 0) : 0), 0);
+  const shown = day.off ? 0 : (p == null ? pts : p);
+  $("#scoreBig").innerHTML = ""; $("#scoreBig").append(String(shown), el("small", { text: ` / ${poss}` }));
+  const bar = $("#scoreBar"); bar.firstChild.style.width = (poss ? Math.min(100, shown / poss * 100) : 0) + "%";
+  bar.lastChild.style.left = `calc(${poss ? Math.min(100, (+c.target || 0) / poss * 100) : 0}% - 1px)`;
+  $("#trackBadge").replaceChildren(el("span", { class: "badge " + (isLogged(day) ? "hit" : "miss"), text: isLogged(day) ? "✓ Tracked" : "Not tracked yet" }));
+  const hitB = $("#hitBadge"); hitB.replaceChildren();
+  if (day.off) hitB.append(el("span", { class: "badge miss", text: "Rest day" }));
+  else if (shown >= (+c.target || 0)) hitB.append(el("span", { class: "badge hit", text: "★ Target hit" }));
+  else hitB.append(el("span", { class: "badge miss", text: `${Math.max(0, (+c.target || 0) - shown)} to target` }));
+  $("#scoreMeta").textContent = day.off ? "Day off: skipped in averages, streaks are kept." : `Target ${c.target} of ${poss} · ${poss ? Math.round(shown / poss * 100) : 0}% of points`;
+  document.querySelectorAll("#habitList .habit").forEach(row => {
+    const h = habits().find(x => x.id === row.dataset.id); if (!h) return;
+    const v = day.h ? day.h[h.id] : undefined;
+    const done = isDone(h, day);
+    row.classList.toggle("done", done && !day.off);
+    row.classList.toggle("slip", h.type === "Avoid" && !!v);
+    row.classList.toggle("off", !!day.off);
+    if (row.getAttribute("role") === "button") row.setAttribute("aria-pressed", String(!!v));
+  });
+  const pk = pokerOf(day), r = day.r || {};
+  const set = (id, html) => { const n = document.getElementById(id); if (n) n.innerHTML = html; };
+  const rs = ["focus", "energy", "disc", "overall"].map(k => r[k]).filter(v => typeof v === "number");
+  set("sumGrade", r.overall ? `Overall ${r.overall}/10` : rs.length ? `${rs.length} of 4 rated` : "Not rated");
+  set("sumPoker", pk.net != null ? `<span class="${pk.net >= 0 ? "pos" : "neg"}">${money(pk.net)}</span>` : "No sessions");
+  set("calcOnline", pk.onBB != null ? `<b>${n1(pk.onBB)}</b> bb won · <b>${n1(pk.bb100)}</b> bb/100` : "bb won and bb/100 appear once you add $ and big blind.");
+  set("calcLive", pk.lvBB != null ? `<b>${n1(pk.lvBB)}</b> bb won · <b>${n1(pk.bbhr)}</b> bb/hr` : "bb won and bb/hr appear once you add $ and big blind.");
+  set("calcMtt", pk.mtNet != null ? `Net <b class="${pk.mtNet >= 0 ? "pos" : "neg"}">${money(pk.mtNet)}</b>${pk.mt.hrs > 0 ? ` · <b>${money(pk.mtNet / pk.mt.hrs)}</b>/hr` : ""}` : "Net and $/hr appear once you add buy-ins or cashes.");
+  const sl = g(day, "sl", "hrs");
+  set("sumSleep", sl != null ? `${n1(sl)} h${sl >= (+c.sleepGoal || 0) ? " ✓" : ""}` : "Not logged");
+  const fc = foodOf(day);
+  set("sumFood", [typeof day.wt === "number" ? n1(day.wt) : null, fc != null ? n0(fc) + " cal" : null].filter(Boolean).join(" · ") || "Not logged");
+  set("calcFood", fc != null ? `Total <b>${n0(fc)}</b> cal · <b class="${(+c.calories || 0) - fc < 0 ? "neg" : ""}">${n0((+c.calories || 0) - fc)}</b> left of ${n0(c.calories)}` : `Daily target ${n0(c.calories)} cal`);
+  set("sumNotes", day.note ? "Written" : "Empty");
+}
+
+/* ----- Stats ----- */
+function svgBars(values, labels, max, fmt) {
+  const W = 340, H = 150, L = 30, B = 20, T = 8, bw = (W - L) / values.length;
+  const s = [`<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Monthly chart">`];
+  for (let i = 0; i <= 4; i++) { const y = T + (H - T - B) * (1 - i / 4); s.push(`<line x1="${L}" x2="${W}" y1="${y}" y2="${y}" stroke="var(--line)"/><text x="${L - 4}" y="${y + 3}" text-anchor="end">${fmt(max * i / 4)}</text>`); }
+  values.forEach((v, i) => { const x = L + i * bw + bw * .18; const h = v == null ? 0 : Math.max(0, Math.min(1, v / max)) * (H - T - B);
+    if (v != null) s.push(`<rect x="${x}" y="${H - B - h}" width="${bw * .64}" height="${h}" rx="3" fill="var(--lav)"/>`);
+    s.push(`<text x="${L + i * bw + bw / 2}" y="${H - 6}" text-anchor="middle">${labels[i]}</text>`); });
+  s.push("</svg>"); return s.join("");
+}
+function svgLine(points, fmt) {
+  const W = 340, H = 150, L = 42, B = 18, T = 8;
+  if (points.length < 2) return `<p class="note">The line appears after two logged days.</p>`;
+  const ys = points.map(p => p.v), lo = Math.min(0, ...ys), hi = Math.max(1, ...ys), span = hi - lo || 1;
+  const X = i => L + (W - L) * i / (points.length - 1), Y = v => T + (H - T - B) * (1 - (v - lo) / span);
+  const d = points.map((p, i) => `${i ? "L" : "M"}${X(i).toFixed(1)},${Y(p.v).toFixed(1)}`).join("");
+  const s = [`<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Cumulative poker results">`];
+  for (let i = 0; i <= 3; i++) { const v = lo + span * i / 3, y = Y(v); s.push(`<line x1="${L}" x2="${W}" y1="${y}" y2="${y}" stroke="var(--line)"/><text x="${L - 4}" y="${y + 3}" text-anchor="end">${fmt(v)}</text>`); }
+  s.push(`<line x1="${L}" x2="${W}" y1="${Y(0)}" y2="${Y(0)}" stroke="var(--muted)" stroke-dasharray="3 3"/>`);
+  s.push(`<path d="${d}L${X(points.length - 1)},${Y(lo)}L${L},${Y(lo)}Z" fill="var(--lav-soft)" opacity=".7"/><path d="${d}" fill="none" stroke="var(--lav)" stroke-width="2.2" stroke-linejoin="round"/>`);
+  const last = points[points.length - 1]; s.push(`<circle cx="${X(points.length - 1)}" cy="${Y(last.v)}" r="4" fill="var(--lav)"/>`);
+  s.push(`<text x="${L}" y="${H - 3}">${fmtShort(points[0].k)}</text><text x="${W}" y="${H - 3}" text-anchor="end">${fmtShort(last.k)}</text></svg>`);
+  return s.join("");
+}
+function renderStats() {
+  const st = computeStats(), c = cfg(), hs = habits();
+  const root = [];
+  if (!st.logged) {
+    view().replaceChildren(el("div", { class: "vhead" }, el("div", {}, el("p", { class: "eyebrow", text: "Stats" }), el("h2", { class: "title", text: String(st.Y) })), yearSwitch()),
+      el("div", { class: "card empty" }, el("h2", { class: "title", text: `Nothing logged in ${st.Y} yet` }),
+      el("p", { class: "note", text: "Log a day on the Today tab. Averages, streaks, habit strength and poker win rates fill in here." }),
+      el("a", { class: "btn", href: "#today", text: "Log today" }))); return;
+  }
+  root.push(el("div", { class: "vhead" }, el("div", {}, el("p", { class: "eyebrow", text: `As of ${fmtLong(st.asof)}` }), el("h2", { class: "title", text: `How ${st.Y} is going` })), yearSwitch()));
+  const kpi = (v, k, accent) => el("div", { class: "kpi" + (accent ? " accent" : "") }, el("span", { class: "v num", text: v }), el("span", { class: "k", text: k }));
+  const avgStrength = st.per.length ? st.per.reduce((a, x) => a + x.strength, 0) / st.per.length : null;
+  root.push(el("div", { class: "kpis" },
+    kpi(n1(st.avgPts), `Avg points · target ${c.target}`, true), kpi(pct(st.hitRate), `Target hit · ${st.hit} days`),
+    kpi(`${st.tStreak} / ${st.tBest}`, "Target streak now / best"), kpi(pct(avgStrength), "Avg habit strength"),
+    kpi(String(st.logged), `Days logged · ${st.off} off`), kpi(money(st.P.net), "Poker net")));
+
+  const hc = el("section", { class: "card" }, el("div", { class: "row" }, el("h3", { class: "sub", text: "Habits" }), el("span", { class: "spacer" }), el("span", { class: "note", text: "Bar = strength" })));
+  st.per.forEach(x => {
+    const tpw = +x.h.tpw || 7;
+    hc.append(el("div", { class: "hrow" },
+      el("span", { class: "nm", text: x.h.name }),
+      el("span", { class: "wk" + (x.wk >= tpw ? " met" : ""), text: `${x.wk} / ${tpw} this wk` }),
+      el("div", { class: "meter", title: "Habit strength " + pct(x.strength) }, el("span", { style: `width:${Math.round(x.strength * 100)}%` })),
+      el("div", { class: "facts" },
+        el("span", {}, "Strength ", el("b", { text: pct(x.strength) })),
+        el("span", {}, "30 days ", el("b", { text: pct(st.on30 ? x.d30 / st.on30 : null) })),
+        el("span", {}, "All-time ", el("b", { text: pct(st.on ? x.done / st.on : null) })),
+        el("span", {}, "Streak ", el("b", { text: `${x.streak}` }), ` · best ${x.best}`),
+        x.h.type === "Minutes" ? el("span", {}, el("b", { text: n1(x.mins / 60) }), " hrs total") : null)));
+  });
+  root.push(hc);
+
+  const P = st.P, hrs = P.lvHrs + P.mtHrs;
+  const pc = el("section", { class: "card" }, el("h3", { class: "sub", text: "Poker" }));
+  const tr = (cells, cls) => el("tr", { class: cls || null }, ...cells.map(c2 => el("td", { html: c2 })));
+  const cl = v => v == null ? "" : v >= 0 ? "pos" : "neg";
+  pc.append(el("div", { class: "scroll-x" }, el("table", { class: "t" },
+    el("thead", {}, el("tr", {}, ...["", "Sessions", "Hrs / hands", "Net", "Win rate"].map(h => el("th", { text: h })))),
+    el("tbody", {},
+      tr(["Online cash", P.onN, n0(P.hands) + " h", `<span class="${cl(P.onWon)}">${money(P.onWon)}</span>`, P.hands ? n1(P.onBB / P.hands * 100) + " bb/100" : "–"]),
+      tr(["Live cash", P.lvN, n1(P.lvHrs) + " hr", `<span class="${cl(P.lvWon)}">${money(P.lvWon)}</span>`, P.lvHrs ? n1(P.lvBB / P.lvHrs) + " bb/hr" : "–"]),
+      tr(["Tournaments", P.mtN, n1(P.mtHrs) + " hr", `<span class="${cl(P.mtNet)}">${money(P.mtNet)}</span>`, P.mtBuy ? pct(P.mtNet / P.mtBuy) + " ROI" : "–"]),
+      tr(["Total", P.days, n1(hrs) + " hr", `<span class="${cl(P.net)}">${money(P.net)}</span>`, hrs ? money(P.net / hrs) + "/hr" : "–"], "total")))));
+  if (+c.profitGoal) pc.append(el("div", { class: "calc" }, "Profit goal ", el("b", { text: money(+c.profitGoal) }), " · ", el("b", { text: pct(P.net / +c.profitGoal) }), " there · study ", el("b", { text: n1(st.sumStudy) }), " hrs"));
+  pc.append(el("p", { class: "lbl", text: "Cumulative net" }), el("div", { html: svgLine(st.series.filter(s => s.logged).map(s => ({ k: s.k, v: s.cum })), v => (v < 0 ? "−" : "") + "$" + Math.abs(Math.round(v)).toLocaleString()) }));
+  root.push(pc);
+
+  const A = st.avg, I = st.ins;
+  const ic = el("section", { class: "card" }, el("h3", { class: "sub", text: "Good days vs. bad days" }),
+    el("p", { class: "note", text: "Days you hit your point target compared with days you missed it." }));
+  const irows = [["Overall rating", "overall", n1], ["Focus", "focus", n1], ["Hours slept", "slp", n1], ["Poker $ / day", "net", money], ["Study hrs / day", "study", n1]];
+  ic.append(el("table", { class: "t" }, el("thead", {}, el("tr", {}, el("th", { text: "" }), el("th", { text: "Hit" }), el("th", { text: "Missed" }))),
+    el("tbody", {}, ...irows.map(([lab, k, f]) => { const a = A(I.hit[k]), b = A(I.miss[k]);
+      return el("tr", {}, el("td", { text: lab }), el("td", { class: a != null && b != null && a > b ? "better" : null, text: f(a) }), el("td", { text: f(b) })); }))));
+  root.push(ic);
+
+  /* Which habits pay off: poker $/day on days a habit was done vs skipped */
+  const MIN_N = 3;
+  const rowsPay = st.per.map(x => {
+    const y = A(x.net.y), n = A(x.net.n);
+    const ok = x.net.y.length >= MIN_N && x.net.n.length >= MIN_N;
+    return { x, y, n, ok, diff: ok ? y - n : null, ovY: A(x.ov.y), ovN: A(x.ov.n), foY: A(x.fo.y), foN: A(x.fo.n) };
+  });
+  const ready = rowsPay.filter(r => r.ok).sort((a, b) => b.diff - a.diff), waiting = rowsPay.filter(r => !r.ok);
+  const maxAbs = Math.max(1, ...ready.map(r => Math.abs(r.diff)));
+  const pay = el("section", { class: "card" },
+    el("h3", { class: "sub", text: "Which habits pay off at the table" }),
+    el("p", { class: "note", text: `Average poker result on days you did each habit compared with days you skipped it. Each side needs ${MIN_N}+ poker days. These show patterns, not proof: busy or tired days can skip habits and run bad at once.` }));
+  if (!ready.length) pay.append(el("p", { class: "calc", text: `Log poker results for a few more days. Each habit needs ${MIN_N} poker days done and ${MIN_N} skipped before it shows here.` }));
+  ready.forEach(r => {
+    const avoid = r.x.h.type === "Avoid", w = Math.round(Math.abs(r.diff) / maxAbs * 50);
+    const sign = r.diff >= 0 ? "+" : "−";
+    pay.append(el("div", { class: "pay" },
+      el("div", { class: "row" }, el("span", { class: "nm", text: r.x.h.name }), el("span", { class: "spacer" }),
+        el("b", { class: "num " + (r.diff >= 0 ? "pos" : "neg"), text: `${sign}$${Math.abs(Math.round(r.diff)).toLocaleString()} / day` })),
+      el("div", { class: "div-bar", "aria-hidden": "true" }, el("i"),
+        el("span", { class: r.diff >= 0 ? "up" : "down", style: r.diff >= 0 ? `left:50%;width:${w}%` : `right:50%;width:${w}%` })),
+      el("div", { class: "facts" },
+        el("span", {}, (avoid ? "Clean " : "Done ") , el("b", { class: cl(r.y), text: money(r.y) }), ` · ${r.x.net.y.length} days`),
+        el("span", {}, (avoid ? "Slipped " : "Skipped "), el("b", { class: cl(r.n), text: money(r.n) }), ` · ${r.x.net.n.length} days`),
+        r.ovY != null && r.ovN != null ? el("span", {}, "Overall ", el("b", { text: n1(r.ovY) }), ` vs ${n1(r.ovN)}`) : null,
+        r.foY != null && r.foN != null ? el("span", {}, "Focus ", el("b", { text: n1(r.foY) }), ` vs ${n1(r.foN)}`) : null)));
+  });
+  if (ready.length && waiting.length) pay.append(el("p", { class: "note", text: "Not enough data yet: " + waiting.map(r => r.x.h.name).join(", ") + "." }));
+  root.push(pay);
+
+  const months = []; for (let i = 0; i < 12; i++) months.push(`${st.Y}-${pad(i + 1)}`);
+  const mc = el("section", { class: "card" }, el("h3", { class: "sub", text: "Avg % of points by month" }),
+    el("div", { html: svgBars(months.map(m => st.month[m] && st.month[m].pcts.length ? A(st.month[m].pcts) : null), months.map(m => parseKey(m + "-01").toLocaleDateString(undefined, { month: "narrow" })), 1, v => Math.round(v * 100) + "%") }));
+  root.push(mc);
+
+  const R = st.ratings, SL = st.sleep;
+  const wFirst = st.wts[0], wLast = st.wts[st.wts.length - 1];
+  const body = el("section", { class: "card" }, el("h3", { class: "sub", text: "Ratings, sleep & body" }),
+    el("div", { class: "grid2" },
+      ...[["Focus", n1(A(R.focus))], ["Energy", n1(A(R.energy))], ["Discipline", n1(A(R.disc))], ["Overall", n1(A(R.overall))], ["Stress", n1(A(R.stress))], ["Mood", n1(A(R.mood))],
+        ["Avg sleep", SL.hrs.length ? n1(A(SL.hrs)) + " h" : "–"], [`Nights ≥ ${c.sleepGoal} h`, pct(SL.hrs.length ? SL.hrs.filter(v => v >= +c.sleepGoal).length / SL.hrs.length : null)],
+        ["Sleep score", n1(A(SL.score))], ["Readiness", n1(A(SL.ready))], ["HRV", n1(A(SL.hrv))], ["Resting HR", n1(A(SL.rhr))],
+        ["Weight now", n1(wLast)], ["Change", wFirst != null ? (wLast - wFirst >= 0 ? "+" : "") + n1(wLast - wFirst) : "–"],
+        ["Avg calories", n0(A(st.cals))], ["Days under target", pct(st.cals.length ? st.cals.filter(v => v <= +c.calories).length / st.cals.length : null)]]
+        .map(([k, v]) => el("div", { class: "row", style: "justify-content:space-between;border-top:1px solid var(--line);padding-top:8px" }, el("span", { class: "lbl", text: k }), el("b", { class: "num", text: v })))));
+  root.push(body);
+  view().replaceChildren(...root);
+}
+
+/* ----- Year ----- */
+function pixelColor(p) {
+  if (p == null) return null;
+  const stops = [[0, [249, 222, 220]], [0.5, [208, 226, 244]], [0.75, [110, 164, 218]], [1, [59, 133, 86]]];
+  let a = stops[0], b = stops[stops.length - 1];
+  for (let i = 0; i < stops.length - 1; i++) if (p >= stops[i][0] && p <= stops[i + 1][0]) { a = stops[i]; b = stops[i + 1]; break; }
+  const t = (p - a[0]) / ((b[0] - a[0]) || 1), c = a[1].map((v, i) => Math.round(v + (b[1][i] - v) * t));
+  return `rgb(${c.join(",")})`;
+}
+function renderYear() {
+  const Y = curYear(), poss = possible(), t = todayKey();
+  const wrap = el("div", { class: "months" });
+  const s0 = new Date(Y, 0, 1, 12);
+  for (let m = 0; m < 12; m++) {
+    const first = new Date(s0.getFullYear(), s0.getMonth() + m, 1, 12), mk = keyOf(first).slice(0, 7);
+    const dim = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
+    const cal = el("div", { class: "cal" }, ..."MTWTFSS".split("").map(d => el("span", { class: "dow", text: d })));
+    const lead = (first.getDay() + 6) % 7; for (let i = 0; i < lead; i++) cal.append(el("span"));
+    const ps = [];
+    for (let d = 1; d <= dim; d++) {
+      const k = `${mk}-${pad(d)}`, day = getDay(k), lg = isLogged(day), p = lg && !day.off && poss ? dayPoints(day) / poss : null;
+      if (p != null) ps.push(p);
+      const b = el("button", { type: "button", class: (k === t ? "today " : "") + (lg && day.off ? "offd" : ""), "aria-label": `${fmtShort(k)}: ${lg ? (day.off ? "day off" : p != null ? Math.round(p * 100) + "% of points" : "logged") : "not logged"}`, text: d,
+        onclick: () => { S.date = k; location.hash = "#today"; if (S.view === "today") render(); } });
+      const col = pixelColor(p); if (col) { b.style.background = col; b.style.color = p >= .75 ? "#fff" : "#282825"; }
+      cal.append(b);
+    }
+    const avg = ps.length ? ps.reduce((a, b) => a + b, 0) / ps.length : null;
+    wrap.append(el("div", { class: "month" }, el("h4", {}, first.toLocaleDateString(undefined, { month: "long" }), avg != null ? el("span", { class: "avg", text: pct(avg) }) : null), cal));
+  }
+  const legend = el("div", { class: "legend" }, "Low", ...[0, .5, .75, 1].map(p => el("span", { class: "sw", style: `background:${pixelColor(p)}` })), "High",
+    el("span", { class: "sw", style: "background:repeating-linear-gradient(45deg,var(--line) 0 3px,transparent 3px 6px);margin-left:10px" }), "Day off");
+  view().replaceChildren(el("div", { class: "vhead" }, el("div", {}, el("p", { class: "eyebrow", text: "Year in pixels" }), el("h2", { class: "title", text: `${Y} at a glance` })), yearSwitch()), legend,
+    el("section", { class: "card" }, wrap), el("p", { class: "note", text: "Tap any day to open it." }));
+}
+
+/* ----- Setup ----- */
+function renderSetup() {
+  const c = JSON.parse(JSON.stringify(cfg())); c.habits = c.habits || [];
+  const root = [el("div", {}, el("p", { class: "eyebrow", text: "Setup" }), el("h2", { class: "title", text: "Targets & habits" }))];
+  const f = (label, key, type = "number", step = "any") => {
+    const id = "s-" + key, inp = el("input", { id, type, step, value: c[key] == null ? "" : c[key] });
+    inp.addEventListener("input", () => { c[key] = type === "number" ? num(inp.value) : inp.value; });
+    return el("div", { class: "field" }, el("label", { for: id, text: label }), inp);
+  };
+  root.push(el("section", { class: "card" }, el("h3", { class: "sub", text: "Targets" }),
+    el("div", { class: "grid2" }, f("Tracking since", "start", "date"), f("Daily point target", "target", "number", "1"), f("Calorie target", "calories", "number", "50"),
+      f("Sleep goal (hours)", "sleepGoal", "number", "0.25"), f("Goal weight", "goalWeight", "number", "0.1"), f("Poker profit goal $", "profitGoal", "number", "100"))));
+
+  const list = el("div", { style: "display:grid;gap:10px" });
+  const total = el("p", { class: "calc" });
+  const drawTotal = () => { total.innerHTML = `Total points possible: <b>${c.habits.filter(h => h.name).reduce((a, h) => a + (+h.pts || 0), 0)}</b>`; };
+  const drawList = () => {
+    list.replaceChildren();
+    c.habits.forEach((h, i) => {
+      const id = "h" + i;
+      const inp = (label, key, attrs = {}) => { const x = el("input", { id: `${id}-${key}`, value: h[key] == null ? "" : h[key], ...attrs });
+        x.addEventListener("input", () => { h[key] = attrs.type === "number" ? num(x.value) : x.value; drawTotal(); });
+        return el("div", { class: "field" }, el("label", { for: `${id}-${key}`, text: label }), x); };
+      const sel = el("select", { id: `${id}-type` }, ...["Check", "Minutes", "Avoid"].map(t => el("option", { value: t, selected: h.type === t, text: t })));
+      sel.addEventListener("change", () => { h.type = sel.value; drawList(); });
+      list.append(el("div", { class: "hedit" },
+        inp("Habit", "name"),
+        el("div", { class: "grid3" }, inp("Category", "cat"), inp("Points", "pts", { type: "number", step: "1", inputmode: "numeric" }),
+          el("div", { class: "field" }, el("label", { for: `${id}-type`, text: "Type" }), sel)),
+        el("div", { class: "grid2" },
+          h.type === "Minutes" ? inp("Min. minutes", "min", { type: "number", step: "1", inputmode: "numeric" }) : el("p", { class: "note", text: h.type === "Avoid" ? "Counts as done unless you mark a slip." : "Done when you tap it." }),
+          inp("Times / week", "tpw", { type: "number", step: "1", min: "1", max: "7", inputmode: "numeric" })),
+        el("div", { class: "row" },
+          el("button", { type: "button", disabled: i === 0, onclick: () => { [c.habits[i - 1], c.habits[i]] = [c.habits[i], c.habits[i - 1]]; drawList(); }, text: "Move up" }),
+          el("button", { type: "button", disabled: i === c.habits.length - 1, onclick: () => { [c.habits[i + 1], c.habits[i]] = [c.habits[i], c.habits[i + 1]]; drawList(); }, text: "Move down" }),
+          el("span", { class: "spacer" }),
+          el("button", { type: "button", style: "color:var(--coral)", onclick: () => { c.habits.splice(i, 1); drawList(); }, text: "Remove" }))));
+    });
+    drawTotal();
+  };
+  drawList();
+  root.push(el("section", { class: "card" }, el("h3", { class: "sub", text: "Habits" }),
+    el("p", { class: "note", text: "Check: tap when done. Minutes: done at the minimum. Avoid: a habit to quit; mark only slips. Removing a habit keeps its past days." }),
+    list, total,
+    el("button", { type: "button", class: "btn ghost", onclick: () => { c.habits.push({ id: "h" + Date.now().toString(36), name: "", cat: "", pts: 1, type: "Check", min: null, tpw: 7 }); drawList(); list.lastChild.querySelector("input").focus(); }, text: "+ Add habit" })));
+
+  root.push(el("div", { class: "row" },
+    el("button", { type: "button", class: "btn", id: "saveSetup", onclick: async () => {
+      if (!S.db || S.readOnly) return toast("Only the owner can change setup.");
+      const clean = { ...c, habits: c.habits.filter(h => (h.name || "").trim()).map(h => ({ ...h, name: h.name.trim(), pts: +h.pts || 0, tpw: Math.min(7, Math.max(1, +h.tpw || 7)) })) };
+      try { await S.db.doc("config/main").set(clean); toast("Setup saved"); }
+      catch (e) { toast(e && e.code === "invalid_argument" ? "Only the owner can change setup." : "Couldn't save setup. Check your connection and try again."); }
+    }, text: "Save setup" }),
+    el("button", { type: "button", class: "btn ghost", onclick: () => { render(); toast("Changes discarded"); }, text: "Discard" })));
+
+  root.push(el("section", { class: "card" }, el("h3", { class: "sub", text: "Export" }),
+    el("p", { class: "note", text: "Download every logged day as a CSV file you can open in Excel or Google Sheets." }),
+    el("button", { type: "button", class: "btn lav", onclick: exportCsv, text: "Download CSV" })));
+  root.push(el("section", { class: "card" }, el("h3", { class: "sub", text: "Backup" }),
+    el("p", { class: "note", text: "Your data is saved only on this phone. Download a backup every week or two, and always before changing phones or clearing Chrome's data. Restore replaces everything on this phone with the backup." }),
+    el("div", { class: "row", style: "flex-wrap:wrap;gap:8px" },
+      el("button", { type: "button", class: "btn", onclick: () => { window.__htBackup(); toast("Backup downloaded"); }, text: "Download backup" }),
+      el("label", { class: "btn ghost", style: "display:inline-flex;align-items:center;cursor:pointer" }, "Restore backup",
+        el("input", { type: "file", accept: ".json,application/json", hidden: true, onchange: async e => {
+          const f = e.target.files[0]; if (!f) return;
+          if (!confirm("Replace everything on this phone with this backup?")) { e.target.value = ""; return; }
+          try { const n = await window.__htRestore(f); toast(`Restored ${n} items`); setTimeout(() => location.reload(), 700); }
+          catch (err) { toast("That file isn't a Habit Tracker backup."); }
+          e.target.value = "";
+        } })))));
+  view().replaceChildren(...root);
+}
+async function exportCsv() {
+  if (!S.downloads) return toast("Downloads aren't available here. Open the tracker on claude.ai in a browser.");
+  const hs = habits(), keys = [...S.days.keys()].sort();
+  const head = ["date", "day_off", ...hs.map(h => h.name), "points", "focus", "energy", "discipline", "overall", "stress", "mood", "study_hrs",
+    "online_hands", "online_bb", "online_won", "live_hrs", "live_bb", "live_won", "mtt_hrs", "mtt_buyins", "mtt_cashes", "poker_net",
+    "sleep_hrs", "sleep_score", "readiness", "hrv", "resting_hr", "weight", "cal_breakfast", "cal_lunch", "cal_dinner", "cal_other", "notes"];
+  const esc = v => v == null ? "" : /[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v);
+  const rows = [head.map(esc).join(",")];
+  for (const k of keys) {
+    const d = getDay(k); if (!isLogged(d)) continue;
+    const pk = pokerOf(d), r = d.r || {}, v = (o, a) => o && typeof o[a] === "number" ? o[a] : "";
+    rows.push([k, d.off ? "Y" : "", ...hs.map(h => { const x = d.h ? d.h[h.id] : undefined; return h.type === "Minutes" ? (typeof x === "number" ? x : "") : h.type === "Avoid" ? (x ? "slip" : "") : (x ? "x" : ""); }),
+      dayPoints(d) ?? "", v(r, "focus"), v(r, "energy"), v(r, "disc"), v(r, "overall"), v(r, "stress"), v(r, "mood"), typeof d.study === "number" ? d.study : "",
+      v(d.on, "hands"), v(d.on, "bb"), v(d.on, "won"), v(d.lv, "hrs"), v(d.lv, "bb"), v(d.lv, "won"), v(d.mt, "hrs"), v(d.mt, "buy"), v(d.mt, "cash"), pk.net ?? "",
+      v(d.sl, "hrs"), v(d.sl, "score"), v(d.sl, "ready"), v(d.sl, "hrv"), v(d.sl, "rhr"), typeof d.wt === "number" ? d.wt : "",
+      v(d.fd, "b"), v(d.fd, "l"), v(d.fd, "d"), v(d.fd, "o"), d.note || ""].map(esc).join(","));
+  }
+  try { await S.downloads.save({ filename: "habit-tracker-export.csv", data: rows.join("\n") }); toast("Exported"); }
+  catch (e) { if (!e || e.code !== "declined") toast("Couldn't export. Try again in a moment."); }
+}
+
+/* ---------- navigation ---------- */
+$("#prevDay").addEventListener("click", () => { S.date = addDays(S.date, -1); renderToday(); });
+$("#nextDay").addEventListener("click", () => { S.date = addDays(S.date, 1); renderToday(); });
+$("#goToday").addEventListener("click", () => { S.date = todayKey(); renderToday(); });
+$("#datePick").addEventListener("change", e => { if (e.target.value) { S.date = e.target.value; renderToday(); } });
+window.addEventListener("hashchange", () => setView(location.hash.slice(1)));
+
+/* ---------- boot ---------- */
+async function boot() {
+  setView(location.hash.slice(1) || "today");
+  const claude = window.claude;
+  if (!claude || !claude.use) { S.noDb = true; setSync("Offline"); renderNoDb(); return; }
+  const [db, user, downloads] = await Promise.all([claude.use("db"), claude.use("user"), claude.use("downloads")]);
+  S.downloads = downloads;
+  if (!db) { S.noDb = true; setSync("Not signed in"); renderNoDb(); return; }
+  S.db = db;
+  if (user) { const owner = await user.isOwner(); if (!owner) S.readOnly = true; }
+  const timer = setTimeout(() => { if (!S.loaded.cfg) { setSync("Can't reach"); view().replaceChildren(el("div", { class: "card empty" }, el("h2", { class: "title", text: "Still connecting" }), el("p", { class: "note", text: "Your tracker can't be reached yet. Check your connection; it loads as soon as it's back." }))); } }, 10000);
+  db.doc("config/main").onSnapshot(snap => {
+    S.cfg = snap.exists ? snap.data() : null;
+    if (!snap.metadata.fromCache) { S.loaded.cfg = true; clearTimeout(timer); setSync("On this phone"); }
+    else S.loaded.cfg = S.loaded.cfg || !!S.cfg;
+    if (S.view !== "setup" || !document.activeElement || !view().contains(document.activeElement)) render();
+  }, () => { setSync("Error"); });
+  db.collection("days").onSnapshot(snap => {
+    let curChanged = false;
+    for (const ch of snap.docChanges()) {
+      const id = ch.doc.id; if (S.dirty.has(id) || S.writing.get(id)) continue;
+      if (ch.type === "removed") S.days.delete(id); else S.days.set(id, ch.doc.data());
+      if (id === S.date) curChanged = true;
+    }
+    S.loaded.days = true;
+    if (S.view === "today") { if (curChanged && !(document.activeElement && view().contains(document.activeElement) && document.activeElement.matches("input,textarea"))) renderToday(); else refreshToday(); }
+    else if (S.view !== "setup") render();
+  }, () => { setSync("Error"); });
+}
+boot();
+})();
+</script>
+</body></html>
