@@ -26,18 +26,57 @@
     BEHAVIOR,
     {"cat":"Health","id":"exercise","min":null,"name":"Exercise / Walk 40 min","pts":2,"tpw":7,"type":"Check"},
     {"cat":"Poker","id":"notilt","min":null,"name":"No tilt / no chasing losses","pts":1,"tpw":7,"type":"Avoid"}]};
-  const SEED_VERSION = 2;
-  if (ls.get("config/main") === undefined) { ls.set("config/main", SEED); ls.set("meta/seed", SEED_VERSION); }
-  else if ((ls.get("meta/seed") || 1) < SEED_VERSION) {
-    // Phones that opened an earlier version: add the new habits once, without touching anything else.
+  const SEED_VERSION = 3;
+  const TYPES = ["np", "poker", "off"];
+  const dayTypeOf = d => d && d.off ? "off" : d && d.type === "poker" ? "poker" : "np";
+  const habitDaysOf = h => h.days ? { np: !!h.days.np, poker: !!h.days.poker, off: !!h.days.off } : { np: h.on !== "poker", poker: h.on !== "np", off: false };
+  const fresh = ls.get("config/main") === undefined;
+  if (fresh) ls.set("config/main", SEED);
+  const v = fresh ? 2 : (ls.get("meta/seed") || 1);
+  if (v < 2) {
+    // Phones that opened the first version: add Playing Poker and Behavior Training once, without touching anything else.
     const c = ls.get("config/main");
     if (c && Array.isArray(c.habits)) {
       if (!c.habits.some(h => h && h.id === PLAY_POKER.id)) c.habits.unshift(PLAY_POKER);
       if (!c.habits.some(h => h && h.id === BEHAVIOR.id)) { const i = c.habits.findIndex(h => h && h.id === "memory"); c.habits.splice(i >= 0 ? i + 1 : c.habits.length, 0, BEHAVIOR); }
       ls.set("config/main", c);
     }
-    ls.set("meta/seed", SEED_VERSION);
   }
+  if (v < 3) {
+    // A day is one type, and each type now keeps its own habits. Split every habit that was shared between types
+    // into one copy per type (the first keeps its id, the others get "<id>-<type>"), then move each logged day's
+    // marks onto the copy for that day's type, so past scores stay the same.
+    const c = ls.get("config/main");
+    if (c && Array.isArray(c.habits)) {
+      if (!fresh) ls.set("meta/config-before-split", c);
+      const ids = new Set(c.habits.map(h => h && h.id)), out = { np: [], poker: [], off: [] }, moved = {};
+      for (const h of c.habits) {
+        if (!h) continue;
+        const d = habitDaysOf(h);
+        TYPES.filter(t => d[t]).forEach((t, i) => {
+          let id = h.id;
+          if (i) { id = `${h.id}-${t}`; for (let n = 2; ids.has(id); n++) id = `${h.id}-${t}${n}`; ids.add(id); (moved[h.id] = moved[h.id] || {})[t] = id; }
+          const cp = JSON.parse(JSON.stringify(h)); delete cp.on; cp.id = id; cp.days = { np: t === "np", poker: t === "poker", off: t === "off" };
+          out[t].push(cp);
+        });
+      }
+      c.habits = [...out.np, ...out.poker, ...out.off];
+      ls.set("config/main", c);
+      const byId = new Map(c.habits.map(h => [h.id, h]));
+      for (const k of ls.keys()) {
+        if (!/^days\/\d{4}-\d{2}-\d{2}$/.test(k)) continue;
+        const day = ls.get(k); if (!day || !day.h || typeof day.h !== "object") continue;
+        const t = dayTypeOf(day); let changed = false;
+        for (const id of Object.keys(day.h)) {
+          const own = byId.get(id); if (own && own.days[t]) continue;
+          const to = (moved[id] && moved[id][t]) || `${id}-${t}`, h2 = byId.get(to);
+          if (h2 && h2.days[t] && !(to in day.h)) { day.h[to] = day.h[id]; delete day.h[id]; changed = true; }
+        }
+        if (changed) ls.set(k, day);
+      }
+    }
+  }
+  if (ls.get("meta/seed") !== SEED_VERSION) ls.set("meta/seed", SEED_VERSION);
 
   const docL = new Map(), colL = new Map();
   const meta = { fromCache: false, hasPendingWrites: false };
