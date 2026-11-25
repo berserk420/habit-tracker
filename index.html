@@ -11,6 +11,7 @@
   --lav: #2173BE; --lav-soft: #E3EEF8; --green: #3B8556; --green-soft: #E1EFE5;
   --coral: #D2443E; --coral-soft: #F9DEDC; --orange: #E0822F; --orange-soft: #FBEBDC;
   --dusk: #6355B5; --dusk-ink: #FFFFFF;
+  --dusk-fill: #7E5ED1; /* Depression squares in Year, both themes: deep enough not to read as a light-blue score square */
   --head: #282825; --head-ink: #FBFBF9;
   --serif: "Instrument Serif", "Iowan Old Style", Georgia, serif;
   --sans: "Manrope", "Segoe UI", system-ui, sans-serif;
@@ -200,13 +201,14 @@ svg.chart text { fill: var(--muted); font-size: 10px; font-family: var(--sans); 
 .cal .dow { font-size: 9px; text-align: center; color: var(--muted); font-weight: 800; }
 .cal button { aspect-ratio: 1; max-width: 100%; border: 0; border-radius: 5px; background: var(--paper); padding: 0; font-size: 9px; font-weight: 700; color: var(--muted); }
 .cal button.today { outline: 2px solid var(--ink); outline-offset: -2px; }
-.cal button.offd { background: repeating-linear-gradient(45deg, var(--line) 0 3px, transparent 3px 6px); }
-.cal button.pkd, .cal button.dpd { position: relative; }
-.cal button.pkd::after { content: ""; position: absolute; top: 2px; right: 2px; width: 5px; height: 5px; border-radius: 50%; background: var(--orange); }
-.cal button.dpd::after { content: ""; position: absolute; top: 2px; right: 2px; width: 5px; height: 5px; border-radius: 1px; background: var(--dusk); box-shadow: 0 0 0 1px var(--card); }
-.legend .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--orange); display: inline-block; margin-left: 10px; }
-.legend .dot.dep { border-radius: 1px; background: var(--dusk); }
-.legend { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); font-weight: 600; flex-wrap: wrap; }
+.cal button.today.fill { outline-offset: 1px; } /* ring goes around a filled square, so the fill stays whole */
+.cal button.offd, .legend .sw.offd { background: repeating-linear-gradient(45deg, var(--line) 0 3px, transparent 3px 6px); }
+.cal button.pkd, .legend .sw.pkd { background: var(--orange); }
+.cal button.dpd, .legend .sw.dpd { background: var(--dusk-fill); }
+.cal button.pkd { color: #282825; }
+.cal button.dpd { color: #FFFFFF; }
+.legend { display: flex; align-items: center; gap: 6px 14px; font-size: 12px; color: var(--muted); font-weight: 600; flex-wrap: wrap; }
+.legend .key { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .legend span.sw { width: 14px; height: 14px; border-radius: 4px; display: inline-block; }
 
 /* setup */
@@ -872,17 +874,19 @@ function renderYear() {
       const k = `${mk}-${pad(d)}`, day = getDay(k), lg = isLogged(day), poss = possibleFor(day), p = lg && !day.off && poss ? dayPoints(day) / poss : null;
       if (p != null) ps.push(p);
       const pk = lg && isPokerDay(day), dp = lg && isDepDay(day);
-      const b = el("button", { type: "button", class: (k === t ? "today " : "") + (lg && day.off ? "offd " : "") + (pk ? "pkd" : dp ? "dpd" : ""), "aria-label": `${fmtShort(k)}: ${lg ? (day.off ? "day off" : (pk ? "poker day, " : dp ? "depression day, " : "") + (p != null ? Math.round(p * 100) + "% of points" : "logged")) : "not logged"}`, text: d,
+      const col = pk || dp ? null : pixelColor(p); // Poker and Depression squares are filled with their day type's color (CSS); the rest shade by score
+      const b = el("button", { type: "button", class: (k === t ? "today " : "") + (lg && day.off ? "offd " : "") + (pk ? "pkd fill" : dp ? "dpd fill" : col ? "fill" : ""), "aria-label": `${fmtShort(k)}: ${lg ? (day.off ? "day off" : (pk ? "poker day, " : dp ? "depression day, " : "") + (p != null ? Math.round(p * 100) + "% of points" : "logged")) : "not logged"}`, text: d,
         onclick: () => { S.date = k; location.hash = "#today"; if (S.view === "today") render(); } });
-      const col = pixelColor(p); if (col) { b.style.background = col; b.style.color = p >= .75 ? "#fff" : "#282825"; }
+      if (col) { b.style.background = col; b.style.color = p >= .75 ? "#fff" : "#282825"; }
       cal.append(b);
     }
     const avg = ps.length ? ps.reduce((a, b) => a + b, 0) / ps.length : null;
     wrap.append(el("div", { class: "month" }, el("h4", {}, first.toLocaleDateString(undefined, { month: "long" }), avg != null ? el("span", { class: "avg", text: pct(avg) }) : null), cal));
   }
-  const legend = el("div", { class: "legend" }, "Low", ...[0, .5, .75, 1].map(p => el("span", { class: "sw", style: `background:${pixelColor(p)}` })), "High",
-    el("span", { class: "sw", style: "background:repeating-linear-gradient(45deg,var(--line) 0 3px,transparent 3px 6px);margin-left:10px" }), "Day off",
-    el("span", { class: "dot" }), "Poker day", el("span", { class: "dot dep" }), "Depression");
+  const key = (...kids) => el("span", { class: "key" }, ...kids), typeKey = (cls, t) => key(el("span", { class: "sw " + cls }), DAY_LABEL[t]);
+  const legend = el("div", { class: "legend" },
+    key("Non-poker: Low", ...[0, .5, .75, 1].map(p => el("span", { class: "sw", style: `background:${pixelColor(p)}` })), "High"),
+    typeKey("pkd", "poker"), typeKey("dpd", "depression"), typeKey("offd", "off"));
   view().replaceChildren(el("div", { class: "vhead" }, el("div", {}, el("p", { class: "eyebrow", text: "Year in pixels" }), el("h2", { class: "title", text: `${Y} at a glance` })), yearSwitch()), legend,
     el("section", { class: "card" }, wrap), el("p", { class: "note", text: "Tap any day to open it." }));
 }
