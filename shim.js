@@ -9,12 +9,13 @@
   };
   const PLAY_POKER = {"cat":"Poker","id":"playpoker","min":null,"max":8,"name":"Playing Poker","pts":1,"tpw":7,"type":"Hours","days":{"np":false,"poker":true,"off":false}};
   const BEHAVIOR = {"cat":"Mind","id":"behavior","min":null,"name":"Behavior Training","pts":2,"tpw":7,"type":"Check","days":{"np":true,"poker":true,"off":false}};
+  const STUDY = {"cat":"Poker","id":"study","min":null,"max":4,"name":"Study Drills or Online Play","pts":2,"tpw":7,"type":"Hours"};
   const SEED = {"start":"2027-01-01","target":13,"calories":2000,"sleepGoal":7.5,"goalWeight":null,"profitGoal":50000,"habits":[
     PLAY_POKER,
     {"cat":"Work","id":"deepwork","min":null,"name":"Deep Work 2hr","pts":2,"tpw":7,"type":"Check"},
     {"cat":"Health","id":"sleep","min":null,"name":"Sleep 7.5hr","pts":2,"tpw":7,"type":"Check"},
     {"cat":"Health","id":"cold","min":null,"name":"Cold / Heat Shock","pts":2,"tpw":7,"type":"Check"},
-    {"cat":"Poker","id":"study","min":null,"name":"2hr Study / Playing","pts":2,"tpw":7,"type":"Check"},
+    STUDY,
     {"cat":"Mind","id":"journal","min":null,"name":"10 min Journaling","pts":1,"tpw":7,"type":"Check"},
     {"cat":"Health","id":"supps","min":null,"name":"Supplements","pts":1,"tpw":7,"type":"Check"},
     {"cat":"Sleep","id":"screens","min":null,"name":"No screens 30 min before bed","pts":1,"tpw":7,"type":"Check"},
@@ -25,7 +26,7 @@
     {"cat":"Mind","id":"memory","min":15,"name":"Memory / Focus Training","pts":2,"tpw":7,"type":"Minutes"},
     BEHAVIOR,
     {"cat":"Health","id":"exercise","min":null,"name":"Exercise / Walk 40 min","pts":2,"tpw":7,"type":"Check"}]};
-  const SEED_VERSION = 4;
+  const SEED_VERSION = 5;
   const TYPES = ["np", "poker", "off"];
   const dayTypeOf = d => d && d.off ? "off" : d && d.type === "poker" ? "poker" : "np";
   const habitDaysOf = h => h.days ? { np: !!h.days.np, poker: !!h.days.poker, off: !!h.days.off } : { np: h.on !== "poker", poker: h.on !== "np", off: false };
@@ -82,6 +83,26 @@
     if (c && Array.isArray(c.habits) && c.habits.some(gone)) {
       ls.set("meta/removed", [...(ls.get("meta/removed") || []), ...c.habits.filter(gone)]);
       c.habits = c.habits.filter(h => !gone(h));
+      ls.set("config/main", c);
+    }
+  }
+  if (v < 5) {
+    // "1hr Study / Drill / Practice online" became "Study Drills or Online Play", scored by the hour, at the owner's
+    // request. Matched by name in every list, ignoring case, spaces and punctuation. A tick on a logged day becomes 1 hour,
+    // which earns the same 2 points. Ticks are converted before the list, so a run cut short can safely repeat. The old
+    // entries are kept in meta/changed.
+    const c = ls.get("config/main"), plain = s => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+    const mine = c && Array.isArray(c.habits) ? c.habits.filter(h => h && plain(h.name) === "1hrstudydrillpracticeonline") : [];
+    if (mine.length) {
+      const ticked = mine.filter(h => h.type === "Check");
+      for (const k of ls.keys()) {
+        if (!/^days\/\d{4}-\d{2}-\d{2}$/.test(k)) continue;
+        const day = ls.get(k); if (!day || !day.h || typeof day.h !== "object") continue;
+        const hit = ticked.filter(h => day.h[h.id] === true);
+        if (hit.length) { hit.forEach(h => { day.h[h.id] = 1; }); ls.set(k, day); }
+      }
+      ls.set("meta/changed", [...(ls.get("meta/changed") || []), ...mine]);
+      for (const h of mine) { h.name = STUDY.name; if (ticked.includes(h)) { h.type = "Hours"; h.pts = STUDY.pts; h.max = STUDY.max; h.min = null; } }
       ls.set("config/main", c);
     }
   }
