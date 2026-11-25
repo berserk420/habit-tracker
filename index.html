@@ -297,8 +297,9 @@ function habitPts(h, day) {
   if (h.type === "Hours") { const v = day.h && typeof day.h[h.id] === "number" ? day.h[h.id] : 0; return r1(Math.min(Math.max(v, 0), hoursCap(h)) * (+h.pts || 0)); }
   return isDone(h, day) ? (+h.pts || 0) : 0;
 }
-const hoursNote = h => `Earns ${+h.pts || 0} pt per hour logged, up to ${hoursCap(h)} hours (${r1(habitMax(h))} pts max). Counts as done from ${+h.min > 0 ? +h.min + " h" : "any time logged"}.`;
-const ptsLabel = h => h.type === "Hours" ? `${+h.pts || 0} pt/hr` : `${+h.pts || 0} pt${+h.pts === 1 ? "" : "s"}`;
+const ptsText = n => `${+n || 0} pt${+n === 1 ? "" : "s"}`;
+const hoursNote = h => `Earns ${ptsText(h.pts)} per hour logged, up to ${hoursCap(h)} hours (${ptsText(r1(habitMax(h)))} max). Counts as done from ${+h.min > 0 ? +h.min + " h" : "any time logged"}.`;
+const ptsLabel = h => ptsText(h.pts) + (h.type === "Hours" ? "/hr" : "");
 const possible = () => habits().reduce((a, h) => a + habitMax(h), 0);
 /* Day types: Non-poker (default), Poker (day.type = "poker"), Day off (day.off), Depression (day.type = "depression"). */
 const dayType = day => day && day.off ? "off" : day && (day.type === "poker" || day.type === "depression") ? day.type : "np";
@@ -671,7 +672,7 @@ function refreshToday() {
   if (day.off && !poss) hitB.append(el("span", { class: "badge miss", text: "Rest day" }));
   else if (noTarget) hitB.append(el("span", { class: "badge miss", text: "No target" }));
   else if (shown >= tgt) hitB.append(el("span", { class: "badge hit", text: "★ Target hit" }));
-  else hitB.append(el("span", { class: "badge miss", text: `${Math.max(0, tgt - shown)} to target` }));
+  else hitB.append(el("span", { class: "badge miss", text: `${r1(Math.max(0, tgt - shown))} to target` }));
   const share = `${poss ? Math.round(shown / poss * 100) : 0}% of points`;
   $("#scoreMeta").textContent = day.off && !poss ? "Day off: skipped in averages, streaks are kept."
     : depEmpty ? "Depression day: not scored, streaks are kept."
