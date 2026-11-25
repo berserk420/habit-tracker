@@ -10,6 +10,7 @@
   --panel: #1F4A4F; --panel-ink: #EEF4F3; --panel-muted: #A9C2C0;
   --lav: #2173BE; --lav-soft: #E3EEF8; --green: #3B8556; --green-soft: #E1EFE5;
   --coral: #D2443E; --coral-soft: #F9DEDC; --orange: #E0822F; --orange-soft: #FBEBDC;
+  --dusk: #6355B5; --dusk-ink: #FFFFFF;
   --head: #282825; --head-ink: #FBFBF9;
   --serif: "Instrument Serif", "Iowan Old Style", Georgia, serif;
   --sans: "Manrope", "Segoe UI", system-ui, sans-serif;
@@ -20,12 +21,14 @@
   --panel: #1E464B; --panel-ink: #EEF4F3; --panel-muted: #9DBDBA;
   --lav: #6FAEE8; --lav-soft: #1F3247; --green: #7CC795; --green-soft: #213729;
   --coral: #F2817B; --coral-soft: #452729; --orange: #F2A766; --orange-soft: #43311F;
+  --dusk: #B9AEE6; --dusk-ink: #282825;
   --head: #111110; --head-ink: #F1F1EC; color-scheme: dark } }
 :root[data-theme="dark"] {
   --paper: #1B1B19; --card: #252522; --ink: #F1F1EC; --muted: #A2A299; --line: #3A3A35;
   --panel: #1E464B; --panel-ink: #EEF4F3; --panel-muted: #9DBDBA;
   --lav: #6FAEE8; --lav-soft: #1F3247; --green: #7CC795; --green-soft: #213729;
   --coral: #F2817B; --coral-soft: #452729; --orange: #F2A766; --orange-soft: #43311F;
+  --dusk: #B9AEE6; --dusk-ink: #282825;
   --head: #111110; --head-ink: #F1F1EC; color-scheme: dark }
 
 html, body { height: 100%; }
@@ -86,14 +89,18 @@ h3.sub { margin: 0; font-size: 15px; font-weight: 800; }
 .badge { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 4px 10px; font-size: 12px; font-weight: 800; }
 .badge.hit { background: var(--orange); color: #282825; }
 .badge.miss { background: color-mix(in srgb, var(--panel-ink) 16%, transparent); color: var(--panel-ink); }
-.seg { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 3px; padding: 3px; border-radius: 999px; background: color-mix(in srgb, var(--panel-ink) 14%, transparent); }
+.seg { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(max-content, 1fr); gap: 3px; padding: 3px; border-radius: 999px; background: color-mix(in srgb, var(--panel-ink) 14%, transparent); }
 .seg button { border: 0; border-radius: 999px; padding: 8px 4px; background: transparent; color: var(--panel-ink); font-weight: 800; font-size: 13px; min-height: 36px; }
 .seg button[aria-checked="true"] { background: var(--panel-ink); color: var(--panel); }
 .seg button[data-v="poker"][aria-checked="true"] { background: var(--orange); color: #282825; }
+.seg button[data-v="depression"][aria-checked="true"] { background: #B9AEE6; color: #282825; }
 .seg.light { background: var(--card); border: 1px solid var(--line); }
 .seg.light button { color: var(--ink); }
 .seg.light button[aria-checked="true"] { background: var(--ink); color: var(--paper); }
 .seg.light button[data-v="poker"][aria-checked="true"] { background: var(--orange); color: #282825; }
+.seg.light button[data-v="depression"][aria-checked="true"] { background: var(--dusk); color: var(--dusk-ink); }
+@media (max-width: 479px) { .seg { grid-auto-columns: auto; } }
+@media (max-width: 359px) { .seg button { font-size: 12px; padding-inline: 2px; } }
 .copyrow { display: flex; align-items: center; gap: 10px; border-top: 1px solid var(--line); padding-top: 10px; }
 .copyrow .nm { flex: 1; min-width: 0; font-weight: 700; }
 .copyrow .nm small { display: block; font-weight: 500; font-size: 12px; color: var(--muted); }
@@ -194,9 +201,11 @@ svg.chart text { fill: var(--muted); font-size: 10px; font-family: var(--sans); 
 .cal button { aspect-ratio: 1; max-width: 100%; border: 0; border-radius: 5px; background: var(--paper); padding: 0; font-size: 9px; font-weight: 700; color: var(--muted); }
 .cal button.today { outline: 2px solid var(--ink); outline-offset: -2px; }
 .cal button.offd { background: repeating-linear-gradient(45deg, var(--line) 0 3px, transparent 3px 6px); }
-.cal button.pkd { position: relative; }
+.cal button.pkd, .cal button.dpd { position: relative; }
 .cal button.pkd::after { content: ""; position: absolute; top: 2px; right: 2px; width: 5px; height: 5px; border-radius: 50%; background: var(--orange); }
+.cal button.dpd::after { content: ""; position: absolute; top: 2px; right: 2px; width: 5px; height: 5px; border-radius: 1px; background: var(--dusk); box-shadow: 0 0 0 1px var(--card); }
 .legend .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--orange); display: inline-block; margin-left: 10px; }
+.legend .dot.dep { border-radius: 1px; background: var(--dusk); }
 .legend { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); font-weight: 600; flex-wrap: wrap; }
 .legend span.sw { width: 14px; height: 14px; border-radius: 4px; display: inline-block; }
 
@@ -289,37 +298,40 @@ function habitPts(h, day) {
 const hoursNote = h => `Earns ${+h.pts || 0} pt per hour logged, up to ${hoursCap(h)} hours (${r1(habitMax(h))} pts max). Counts as done from ${+h.min > 0 ? +h.min + " h" : "any time logged"}.`;
 const ptsLabel = h => h.type === "Hours" ? `${+h.pts || 0} pt/hr` : `${+h.pts || 0} pt${+h.pts === 1 ? "" : "s"}`;
 const possible = () => habits().reduce((a, h) => a + habitMax(h), 0);
-/* Day types: Non-poker (default), Poker (day.type = "poker"), Day off (day.off). Habits say which days they count on. */
-const dayType = day => day && day.off ? "off" : day && day.type === "poker" ? "poker" : "np";
+/* Day types: Non-poker (default), Poker (day.type = "poker"), Day off (day.off), Depression (day.type = "depression"). */
+const dayType = day => day && day.off ? "off" : day && (day.type === "poker" || day.type === "depression") ? day.type : "np";
 const isPokerDay = day => dayType(day) === "poker";
-/* Which day types a habit counts on. Older setups stored h.on ("both" | "np" | "poker"). */
-const habitDays = h => h.days ? { np: !!h.days.np, poker: !!h.days.poker, off: !!h.days.off } : { np: h.on !== "poker", poker: h.on !== "np", off: false };
+const isDepDay = day => dayType(day) === "depression";
+/* Which day type a habit belongs to. Older setups stored h.on ("both" | "np" | "poker"). */
+const habitDays = h => h.days ? { np: !!h.days.np, poker: !!h.days.poker, off: !!h.days.off, depression: !!h.days.depression } : { np: h.on !== "poker", poker: h.on !== "np", off: false, depression: false };
 const appliesTo = (h, day) => habitDays(h)[dayType(day)];
 const habitsFor = day => habits().filter(h => appliesTo(h, day));
 const possibleFor = day => r1(habitsFor(day).reduce((a, h) => a + habitMax(h), 0));
-const TARGET_KEY = { np: "target", poker: "pokerTarget", off: "offTarget" };
-const targetFor = day => { const c = cfg(), v = c[TARGET_KEY[dayType(day)]]; return v != null && v !== "" ? +v : dayType(day) === "off" ? 0 : (+c.target || 0); };
-const DAY_LABEL = { np: "Non-poker", poker: "Poker", off: "Day off" };
+const TARGET_KEY = { np: "target", poker: "pokerTarget", off: "offTarget", depression: "depressionTarget" };
+/* Depression days have no target (null) until one is set, so by default they are never a miss. */
+const targetFor = day => { const c = cfg(), t = dayType(day), v = c[TARGET_KEY[t]]; return v != null && v !== "" ? +v : t === "off" ? 0 : t === "depression" ? null : (+c.target || 0); };
+const DAY_LABEL = { np: "Non-poker", poker: "Poker", off: "Day off", depression: "Depression" };
 const dayNoun = t => t === "off" ? "days off" : `${DAY_LABEL[t]} days`;
-const DAY_TYPES = ["np", "poker", "off"];
+const DAY_TYPES = ["np", "poker", "off", "depression"];
+const onlyOn = t => Object.fromEntries(DAY_TYPES.map(k => [k, k === t]));
 const typeOf = h => DAY_TYPES.find(t => habitDays(h)[t]) || "np";
 const newId = () => "h" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 /* A day is one type, and each type keeps its own habits. Older setups could share one habit between types:
    give each type its own copy (the first keeps the id, the others get "<id>-<type>"). On the phone, shim.js
    does the same split once and moves past days' marks onto the copy for that day's type. */
 function splitHabits(list) {
-  const out = { np: [], poker: [], off: [] }, ids = new Set(list.map(h => h && h.id));
+  const out = Object.fromEntries(DAY_TYPES.map(t => [t, []])), ids = new Set(list.map(h => h && h.id));
   for (const h of list) {
     if (!h) continue;
     const d = habitDays(h);
     DAY_TYPES.filter(t => d[t]).forEach((t, i) => {
       let id = h.id;
       if (i) { id = `${h.id}-${t}`; for (let n = 2; ids.has(id); n++) id = `${h.id}-${t}${n}`; ids.add(id); }
-      const cp = JSON.parse(JSON.stringify(h)); delete cp.on; cp.id = id; cp.days = { np: t === "np", poker: t === "poker", off: t === "off" };
+      const cp = JSON.parse(JSON.stringify(h)); delete cp.on; cp.id = id; cp.days = onlyOn(t);
       out[t].push(cp);
     });
   }
-  return [...out.np, ...out.poker, ...out.off];
+  return DAY_TYPES.flatMap(t => out[t]);
 }
 
 /* ---------- day logic (mirrors the Excel workbook) ---------- */
@@ -341,6 +353,7 @@ function isDone(h, day) {
 }
 function dayPoints(day) {
   if (!isLogged(day) || day.off) return null;
+  if (isDepDay(day) && !habitsFor(day).length) return null; // nothing asked of the day, so nothing to score
   return r1(habitsFor(day).reduce((a, h) => a + habitPts(h, day), 0));
 }
 const g = (o, a, b) => (o && o[a] && typeof o[a][b] === "number") ? o[a][b] : null;
@@ -393,7 +406,8 @@ function computeStats(Y = curYear()) {
     net: { y: [], n: [] }, ov: { y: [], n: [] }, fo: { y: [], n: [] } }));
   const weekStart = addDays(start, 7 * Math.floor(diffDays(start, asof) / 7));
   let logged = 0, off = 0, on = 0, hit = 0, tStreak = 0, tBest = 0, on7 = 0, on30 = 0, pts = [], pcts = [], pts7 = [];
-  const typeN = { np: 0, poker: 0, off: 0 };
+  const typeN = Object.fromEntries(DAY_TYPES.map(t => [t, 0]));
+  let judgedN = 0; // scored days that have a target
   const series = [];
   const P = { onN: 0, hands: 0, onWon: 0, onBB: 0, lvN: 0, lvHrs: 0, lvWon: 0, lvBB: 0, mtN: 0, mtHrs: 0, mtBuy: 0, mtNet: 0, days: 0, net: 0 };
   const ins = { hit: {}, miss: {} };
@@ -407,11 +421,11 @@ function computeStats(Y = curYear()) {
     const k = addDays(start, i), day = getDay(k), lg = isLogged(day), isOff = lg && !!day.off, isOn = lg && !isOff;
     const in7 = diffDays(k, asof) < 7, in30 = diffDays(k, asof) < 30, inWk = k >= weekStart;
     if (lg) { logged++; typeN[dayType(day)]++; } if (isOff) off++; if (isOn) { on++; if (in7) on7++; if (in30) on30++; }
-    const p = isOn ? dayPoints(day) : null, poss = possibleFor(day);
-    const isHit = p != null && p >= targetFor(day);
+    const p = isOn ? dayPoints(day) : null, poss = possibleFor(day), tgt = targetFor(day);
+    const judged = p != null && tgt != null, isHit = judged && p >= tgt;
     if (p != null) { pts.push(p); pcts.push(poss ? p / poss : 0); if (in7) pts7.push(p); }
-    if (isHit) hit++;
-    tStreak = isHit ? tStreak + 1 : (isOff ? tStreak : 0); tBest = Math.max(tBest, tStreak);
+    if (judged) judgedN++; if (isHit) hit++;
+    tStreak = isHit ? tStreak + 1 : (lg && !judged ? tStreak : 0); tBest = Math.max(tBest, tStreak);
     const pkDay = pokerOf(day), rDay = day.r || {};
     per.forEach(x => {
       const ap = lg && appliesTo(x.h, day), skip = lg && !ap;
@@ -442,7 +456,7 @@ function computeStats(Y = curYear()) {
     if (typeof day.wt === "number") wts.push(day.wt);
     const fc = foodOf(day); if (fc != null) cals.push(fc);
     if (typeof day.study === "number") study.push(day.study);
-    if (isOn) {
+    if (judged) {
       const bucket = isHit ? ins.hit : ins.miss;
       const vals = { overall: rv.overall, focus: rv.focus, slp: g(day, "sl", "hrs"), net: pk.net, study: day.study };
       for (const kk of insKeys) if (typeof vals[kk] === "number") bucket[kk].push(vals[kk]);
@@ -452,7 +466,7 @@ function computeStats(Y = curYear()) {
   }
   const avg = a => a.length ? a.reduce((x, y) => x + y, 0) / a.length : null;
   return { Y, start, asof, N, logged, off, on, hit, tStreak, tBest, on7, on30, weekStart, per, P, series, month, typeN,
-    avgPts: avg(pts), avgPct: avg(pcts), avg7: avg(pts7), hitRate: on ? hit / on : null,
+    avgPts: avg(pts), avgPct: avg(pcts), avg7: avg(pts7), hitRate: judgedN ? hit / judgedN : null,
     ins, avg, ratings, sleep, wts, cals, study, sumStudy: study.reduce((a, b) => a + b, 0) };
 }
 
@@ -558,8 +572,8 @@ function renderToday() {
   }
   const panel = el("section", { class: "panel", "aria-label": "Today's score" },
     el("div", { class: "seg", id: "dayType", role: "radiogroup", "aria-label": "Day type" },
-      ...[["np", "Non-poker"], ["poker", "Poker"], ["off", "Day off"]].map(([v, t]) => el("button", { type: "button", role: "radio", "data-v": v, "aria-checked": String(dayType(day) === v), text: t,
-        onclick: () => { if (dayType(getDay(S.date)) === v) return; mutate(d => { delete d.off; delete d.type; if (v === "off") d.off = true; if (v === "poker") d.type = "poker"; }); renderToday(); } }))),
+      ...DAY_TYPES.map(v => el("button", { type: "button", role: "radio", "data-v": v, "aria-checked": String(dayType(day) === v), text: DAY_LABEL[v],
+        onclick: () => { if (dayType(getDay(S.date)) === v) return; mutate(d => { delete d.off; delete d.type; if (v === "off") d.off = true; else if (v !== "np") d.type = v; }); renderToday(); } }))),
     el("div", { class: "row" }, el("p", { class: "eyebrow", style: "color:var(--panel-muted)", text: "Points" }), el("span", { id: "trackBadge" })),
     el("div", { class: "row" }, el("div", { class: "big num", id: "scoreBig" }), el("span", { class: "spacer" }), el("span", { id: "hitBadge" })),
     el("div", { class: "bar", id: "scoreBar" }, el("span"), el("i")),
@@ -568,7 +582,7 @@ function renderToday() {
 
   const list = el("div", { class: "habits", id: "habitList" });
   const shownHabits = habitsFor(day);
-  if (!shownHabits.length) list.append(el("p", { class: "note", text: day.off ? "Rest day. No habits count on days off; you can add some in Setup → Day off." : `No habits count on ${DAY_LABEL[dayType(day)]} days yet. Add them in Setup.` }));
+  if (!shownHabits.length) list.append(el("p", { class: "note", text: day.off ? "Rest day. No habits count on days off; you can add some in Setup → Day off." : isDepDay(day) ? "Nothing is asked of Depression days yet. You can pick a few small habits in Setup → Depression." : `No habits count on ${DAY_LABEL[dayType(day)]} days yet. Add them in Setup.` }));
   shownHabits.forEach(h => {
     const row = el("div", { class: "habit", "data-id": h.id });
     const tick = el("span", { class: "tick", html: h.type === "Avoid" ? CROSS : CHECK });
@@ -646,14 +660,20 @@ function refreshToday() {
   const shown = p == null ? pts : p;
   $("#scoreBig").innerHTML = ""; $("#scoreBig").append(String(shown), el("small", { text: ` / ${poss}` }));
   const bar = $("#scoreBar"); bar.firstChild.style.width = (poss ? Math.min(100, shown / poss * 100) : 0) + "%";
-  bar.lastChild.style.left = `calc(${poss ? Math.min(100, tgt / poss * 100) : 0}% - 1px)`;
+  const depEmpty = isDepDay(day) && !poss, noTarget = tgt == null || depEmpty;
+  bar.lastChild.style.display = noTarget ? "none" : "";
+  bar.lastChild.style.left = `calc(${poss && !noTarget ? Math.min(100, tgt / poss * 100) : 0}% - 1px)`;
   document.querySelectorAll("#dayType button").forEach(b => b.setAttribute("aria-checked", String(b.dataset.v === dayType(day))));
   $("#trackBadge").replaceChildren(el("span", { class: "badge " + (isLogged(day) ? "hit" : "miss"), text: isLogged(day) ? "✓ Tracked" : "Not tracked yet" }));
   const hitB = $("#hitBadge"); hitB.replaceChildren();
   if (day.off && !poss) hitB.append(el("span", { class: "badge miss", text: "Rest day" }));
+  else if (noTarget) hitB.append(el("span", { class: "badge miss", text: "No target" }));
   else if (shown >= tgt) hitB.append(el("span", { class: "badge hit", text: "★ Target hit" }));
   else hitB.append(el("span", { class: "badge miss", text: `${Math.max(0, tgt - shown)} to target` }));
-  $("#scoreMeta").textContent = day.off && !poss ? "Day off: skipped in averages, streaks are kept." : `${day.off ? "Day off · " : isPokerDay(day) ? "Poker day · " : ""}Target ${tgt} of ${poss} · ${poss ? Math.round(shown / poss * 100) : 0}% of points`;
+  const share = `${poss ? Math.round(shown / poss * 100) : 0}% of points`;
+  $("#scoreMeta").textContent = day.off && !poss ? "Day off: skipped in averages, streaks are kept."
+    : depEmpty ? "Depression day: not scored, streaks are kept."
+    : (day.off ? "Day off · " : isPokerDay(day) ? "Poker day · " : isDepDay(day) ? "Depression day · " : "") + (noTarget ? share : `Target ${tgt} of ${poss} · ${share}`);
   document.querySelectorAll("#habitList .habit").forEach(row => {
     const h = habits().find(x => x.id === row.dataset.id); if (!h) return;
     const v = day.h ? day.h[h.id] : undefined;
@@ -851,8 +871,8 @@ function renderYear() {
     for (let d = 1; d <= dim; d++) {
       const k = `${mk}-${pad(d)}`, day = getDay(k), lg = isLogged(day), poss = possibleFor(day), p = lg && !day.off && poss ? dayPoints(day) / poss : null;
       if (p != null) ps.push(p);
-      const pk = lg && isPokerDay(day);
-      const b = el("button", { type: "button", class: (k === t ? "today " : "") + (lg && day.off ? "offd " : "") + (pk ? "pkd" : ""), "aria-label": `${fmtShort(k)}: ${lg ? (day.off ? "day off" : (pk ? "poker day, " : "") + (p != null ? Math.round(p * 100) + "% of points" : "logged")) : "not logged"}`, text: d,
+      const pk = lg && isPokerDay(day), dp = lg && isDepDay(day);
+      const b = el("button", { type: "button", class: (k === t ? "today " : "") + (lg && day.off ? "offd " : "") + (pk ? "pkd" : dp ? "dpd" : ""), "aria-label": `${fmtShort(k)}: ${lg ? (day.off ? "day off" : (pk ? "poker day, " : dp ? "depression day, " : "") + (p != null ? Math.round(p * 100) + "% of points" : "logged")) : "not logged"}`, text: d,
         onclick: () => { S.date = k; location.hash = "#today"; if (S.view === "today") render(); } });
       const col = pixelColor(p); if (col) { b.style.background = col; b.style.color = p >= .75 ? "#fff" : "#282825"; }
       cal.append(b);
@@ -862,7 +882,7 @@ function renderYear() {
   }
   const legend = el("div", { class: "legend" }, "Low", ...[0, .5, .75, 1].map(p => el("span", { class: "sw", style: `background:${pixelColor(p)}` })), "High",
     el("span", { class: "sw", style: "background:repeating-linear-gradient(45deg,var(--line) 0 3px,transparent 3px 6px);margin-left:10px" }), "Day off",
-    el("span", { class: "dot" }), "Poker day");
+    el("span", { class: "dot" }), "Poker day", el("span", { class: "dot dep" }), "Depression");
   view().replaceChildren(el("div", { class: "vhead" }, el("div", {}, el("p", { class: "eyebrow", text: "Year in pixels" }), el("h2", { class: "title", text: `${Y} at a glance` })), yearSwitch()), legend,
     el("section", { class: "card" }, wrap), el("p", { class: "note", text: "Tap any day to open it." }));
 }
@@ -922,14 +942,15 @@ function renderSetup() {
           el("span", { class: "spacer" }),
           el("button", { type: "button", style: "color:var(--coral)", onclick: () => { if (!(h.name || "").trim() || confirm(`Delete "${h.name.trim()}" from ${dayNoun(t)}?`)) { c.habits.splice(c.habits.indexOf(h), 1); drawPane(); } }, text: "Delete" }))));
     });
-    if (!mine.length) list.append(el("p", { class: "note", text: t === "off" ? "No habits count on days off, so they're rest days. Add one below if you want to track something on days off." : `No habits count on ${dayNoun(t)} yet.` }));
+    if (!mine.length) list.append(el("p", { class: "note", text: t === "off" ? "No habits count on days off, so they're rest days. Add one below if you want to track something on days off." : t === "depression" ? "No habits on Depression days yet, so they aren't scored and don't break streaks. Add a few small ones below if you like." : `No habits count on ${dayNoun(t)} yet.` }));
     drawTotal();
     const card = el("section", { class: "card" },
       el("h3", { class: "sub", text: t === "off" ? "Days off" : dayNoun(t) }),
       el("div", { class: "grid2" }, f(t === "off" ? "Day off target" : `${DAY_LABEL[t]} day target`, tk, "number", "1")),
+      t === "depression" ? el("p", { class: "note", text: "Leave the target blank and these days never count as a miss." }) : null,
       el("p", { class: "note", text: "Check: tap when done. Minutes: done at the minimum. Hours: points for each hour logged. Avoid: a habit to quit; mark only slips." }),
       list, total,
-      el("button", { type: "button", class: "btn ghost", onclick: () => { c.habits.push({ id: newId(), name: "", cat: "", pts: 1, type: "Check", min: null, tpw: 7, days: { np: false, poker: false, off: false, [t]: true } }); drawPane(); const ins = pane.querySelectorAll(".hedit"); if (ins.length) ins[ins.length - 1].querySelector("input").focus(); }, text: `+ New habit for ${dayNoun(t)}` }));
+      el("button", { type: "button", class: "btn ghost", onclick: () => { c.habits.push({ id: newId(), name: "", cat: "", pts: 1, type: "Check", min: null, tpw: 7, days: onlyOn(t) }); drawPane(); const ins = pane.querySelectorAll(".hedit"); if (ins.length) ins[ins.length - 1].querySelector("input").focus(); }, text: `+ New habit for ${dayNoun(t)}` }));
     // Habits from the other day types that this type doesn't have yet (matched by name). Copying makes a separate habit.
     const have = new Set(mine.map(h => (h.name || "").trim().toLowerCase())), rest = [];
     for (const h of c.habits) { const k = (h.name || "").trim().toLowerCase(); if (!h.days[t] && k && !have.has(k)) { have.add(k); rest.push(h); } }
@@ -939,7 +960,7 @@ function renderSetup() {
       ...rest.map(h => el("div", { class: "copyrow" },
         el("span", { class: "nm" }, h.name, el("small", { text: `${DAY_LABEL[typeOf(h)]} · ${ptsLabel(h)}` })),
         el("button", { type: "button", class: "btn ghost", style: "padding:6px 12px", onclick: () => {
-          const cp = JSON.parse(JSON.stringify(h)); cp.id = newId(); cp.days = { np: t === "np", poker: t === "poker", off: t === "off" };
+          const cp = JSON.parse(JSON.stringify(h)); cp.id = newId(); cp.days = onlyOn(t);
           c.habits.push(cp); drawPane();
         }, text: "+ Copy" })))) : null;
     pane.replaceChildren(card, ...(other ? [other] : []));
@@ -985,7 +1006,7 @@ async function exportCsv() {
   for (const k of keys) {
     const d = getDay(k); if (!isLogged(d)) continue;
     const pk = pokerOf(d), r = d.r || {}, v = (o, a) => o && typeof o[a] === "number" ? o[a] : "";
-    rows.push([k, { off: "Day off", poker: "Poker", np: "Non-poker" }[dayType(d)], ...hs.map(h => { const x = d.h ? d.h[h.id] : undefined; return h.type === "Minutes" || h.type === "Hours" ? (typeof x === "number" ? x : "") : h.type === "Avoid" ? (x ? "slip" : "") : (x ? "x" : ""); }),
+    rows.push([k, DAY_LABEL[dayType(d)], ...hs.map(h => { const x = d.h ? d.h[h.id] : undefined; return h.type === "Minutes" || h.type === "Hours" ? (typeof x === "number" ? x : "") : h.type === "Avoid" ? (x ? "slip" : "") : (x ? "x" : ""); }),
       dayPoints(d) ?? "", v(r, "focus"), v(r, "energy"), v(r, "disc"), v(r, "overall"), v(r, "stress"), v(r, "mood"), typeof d.study === "number" ? d.study : "",
       v(d.on, "hands"), v(d.on, "bb"), v(d.on, "won"), v(d.lv, "hrs"), v(d.lv, "bb"), v(d.lv, "won"), v(d.mt, "hrs"), v(d.mt, "buy"), v(d.mt, "cash"), pk.net ?? "",
       v(d.sl, "hrs"), v(d.sl, "score"), v(d.sl, "ready"), v(d.sl, "hrv"), v(d.sl, "rhr"), typeof d.wt === "number" ? d.wt : "",
