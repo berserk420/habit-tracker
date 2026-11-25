@@ -24,9 +24,8 @@
     {"cat":"Mind","id":"mindful","min":10,"name":"Mindfulness","pts":2,"tpw":7,"type":"Minutes"},
     {"cat":"Mind","id":"memory","min":15,"name":"Memory / Focus Training","pts":2,"tpw":7,"type":"Minutes"},
     BEHAVIOR,
-    {"cat":"Health","id":"exercise","min":null,"name":"Exercise / Walk 40 min","pts":2,"tpw":7,"type":"Check"},
-    {"cat":"Poker","id":"notilt","min":null,"name":"No tilt / no chasing losses","pts":1,"tpw":7,"type":"Avoid"}]};
-  const SEED_VERSION = 3;
+    {"cat":"Health","id":"exercise","min":null,"name":"Exercise / Walk 40 min","pts":2,"tpw":7,"type":"Check"}]};
+  const SEED_VERSION = 4;
   const TYPES = ["np", "poker", "off"];
   const dayTypeOf = d => d && d.off ? "off" : d && d.type === "poker" ? "poker" : "np";
   const habitDaysOf = h => h.days ? { np: !!h.days.np, poker: !!h.days.poker, off: !!h.days.off } : { np: h.on !== "poker", poker: h.on !== "np", off: false };
@@ -74,6 +73,16 @@
         }
         if (changed) ls.set(k, day);
       }
+    }
+  }
+  if (v < 4) {
+    // "No tilt / no chasing losses" was taken off every list at the owner's request. Matched by name, so one that was
+    // renamed into something else stays. The removed entries are kept in meta/removed, and day logs are not touched.
+    const c = ls.get("config/main"), gone = h => !!h && String(h.name || "").trim().toLowerCase() === "no tilt / no chasing losses";
+    if (c && Array.isArray(c.habits) && c.habits.some(gone)) {
+      ls.set("meta/removed", [...(ls.get("meta/removed") || []), ...c.habits.filter(gone)]);
+      c.habits = c.habits.filter(h => !gone(h));
+      ls.set("config/main", c);
     }
   }
   if (ls.get("meta/seed") !== SEED_VERSION) ls.set("meta/seed", SEED_VERSION);
